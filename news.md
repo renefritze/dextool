@@ -1,5 +1,9 @@
 # vNext
 
+Fixes
+* Fix shutdown message when running a mutants schemata and maxRuntime is
+  reached. It now prints number of works left to stop instead of loadavg
+
 # v5.2 Dolomite
 
  * Dropped manually maintained bindings for libclang in favor of using D's

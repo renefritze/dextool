@@ -1026,6 +1026,12 @@ auto spawnSchemaTester(SchemaTestActor.Impl self, FilesysIO fio,
             if (halt != TestStopCheck.HaltReason.none) {
                 // clear mutants to test so the actor will stop as soon as it can
                 ctx.state.injectIds = typeof(ctx.state.injectIds).init;
+            }
+
+            if (halt == TestStopCheck.HaltReason.maxRuntime) {
+                logger.infof("Max runtime reached. Waiting on %s workers to finish",
+                        ctx.state.scheduler.length - ctx.state.scheduler.freeWorkers);
+            } else if (halt != TestStopCheck.HaltReason.none) {
                 logger.info(ctx.state.borrow!((ref a) => a.stopCheck.overloadToString));
             }
         } catch (Exception e) {
