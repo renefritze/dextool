@@ -77,6 +77,14 @@ struct ScheduleTest {
         foreach (a; testers)
             send(a, conf);
     }
+
+    size_t freeWorkers() @safe pure nothrow const @nogc {
+        return free.length;
+    }
+
+    size_t length() @safe pure nothrow const @nogc {
+        return testers.length;
+    }
 }
 
 struct SchemaTestResult {
