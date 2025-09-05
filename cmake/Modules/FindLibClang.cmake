@@ -36,7 +36,7 @@ execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR} print-llvm-config-candid
     OUTPUT_VARIABLE llvm_config_CANDIDATES
     RESULT_VARIABLE llvm_config_CANDIDATES_status
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-message(STATUS "${llvm_config_CANDIDATES_status} ${llvm_config_CANDIDATES}")
+message(STATUS "exit status:${llvm_config_CANDIDATES_status} ${llvm_config_CANDIDATES}")
 
 execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR}  ldflags
     OUTPUT_VARIABLE llvm_config_LDFLAGS
