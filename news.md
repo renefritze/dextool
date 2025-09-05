@@ -3,6 +3,8 @@
 Fixes
 * Fix shutdown message when running a mutants schemata and maxRuntime is
   reached. It now prints number of works left to stop instead of loadavg
+* Fix HTML report for mutation testing. Not all mutants in a file report where
+  shown.
 
 # v5.2 Dolomite
 

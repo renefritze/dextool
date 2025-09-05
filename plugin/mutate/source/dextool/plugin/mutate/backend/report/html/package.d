@@ -757,9 +757,6 @@ void generateFile(ref Database db, ref FileCtx ctx) @trusted {
     mut_data.put("var g_muts_data = {};");
     mut_data.put("g_muts_data['-1'] = {'kind' : null, 'kindGroup' : null, 'status' : null, 'testCases' : null, 'orgText' : null, 'mutText' : null, 'meta' : null, 'size' : null};");
 
-    // used to make sure that metadata about a mutant is only written onces
-    // to the global arrays.
-    Set!MutationStatusId metadataOnlyOnce;
     auto muts = appender!(MData[])();
 
     // this is the last location. It is used to calculate the num of
@@ -769,8 +766,31 @@ void generateFile(ref Database db, ref FileCtx ctx) @trusted {
     // read coverage data and save covered lines in lineList
     auto dbData = db.coverageApi.getCoverageStatus(ctx.fileId);
 
-    auto lineList = extractLineCovData(dbData, ctx);
+    void addMutantsTo_g_muts_data() {
+        foreach (m; ctx.span.muts) {
+            const metadata = db.mutantApi.getMutantMetaData(m.stId);
 
+            muts.put(MData(m.stId, m.txt, m.mut, metadata));
+
+            auto testCases = ctx.getTestCaseInfo(m.stId);
+            auto tcText = testCases.empty
+                ? "null" : format!"[%('%s',%)']"(testCases.map!(a => a.name));
+            mut_data.put(format(`g_muts_data['%s'] = {'kind' : %s, 'kindGroup' : %s, 'status' : %s, 'testCases' : %s, 'orgText' : %s, 'mutText' : %s, 'meta' : '%s', 'size' : %d};`,
+                    m.stId, m.mut.kind.to!int, toUser(m.mut.kind).to!int,
+                    m.mut.status.to!ubyte, tcText, toJson(window(m.txt.original)),
+                    toJson(window(m.txt.mutation)), metadata.kindToString, m.txt.mutation.length));
+        }
+    };
+    addMutantsTo_g_muts_data();
+
+    auto lineList = extractLineCovData(dbData, ctx);
+    void markCoverage(Element parent, int loc) {
+        if (auto v = loc in lineList) {
+            parent.firstChild.addClass((*v) ? "loc_covered" : "loc_noncovered");
+        }
+    }
+
+    Set!MutationStatusId onlyOnce;
     foreach (const s; ctx.span.toRange) {
         if (s.tok.loc.line > lastLoc.line) {
             lastLoc.column = 1;
@@ -778,18 +798,15 @@ void generateFile(ref Database db, ref FileCtx ctx) @trusted {
 
         auto meta = MetaSpan(s.muts);
 
+        // move forward until the next token. Stop on the next token and
+        // prepare the Element to be populated with mutants, if any.
         foreach (const i; 0 .. max(0, s.tok.loc.line - lastLoc.line)) {
             line = lines.addChild("tr").addChild("td");
             line.setAttribute("id", format("%s-%s", "loc", lastLoc.line + i + 1))
                 .addClass("loc").addChild("span", format("%s:",
                     lastLoc.line + i + 1)).addClass("line_nr");
 
-            if (auto v = (lastLoc.line + i + 1) in lineList) {
-                if (*v)
-                    line.firstChild.addClass("loc_covered");
-                else
-                    line.firstChild.addClass("loc_noncovered");
-            }
+            markCoverage(line, lastLoc.line + i + 1);
 
             // force a newline in the generated html to improve readability
             lines.appendText("\n");
@@ -804,43 +821,20 @@ void generateFile(ref Database db, ref FileCtx ctx) @trusted {
             addClass(s.tok.toName);
             if (auto v = meta.status.toVisible)
                 addClass(v);
-            if (s.muts.length != 0)
+            if (!s.muts.empty)
                 addClass(format("%(mutid%s %)", s.muts.map!(a => a.stId)));
             if (meta.onClick.length != 0)
                 setAttribute("onclick", meta.onClick);
         }
 
-        // TODO: remove metadataOnlyOnce? i think it is there only because
-        // mutationId could occur multiple times.
-        foreach (m; s.muts.filter!(m => m.stId !in metadataOnlyOnce)) {
-            metadataOnlyOnce.add(m.stId);
-
-            const metadata = db.mutantApi.getMutantMetaData(m.stId);
-
-            muts.put(MData(m.stId, m.txt, m.mut, metadata));
-            {
-                auto mutantHtmlTag = d0.addChild("span").addClass("mutant")
-                    .setAttribute("id", m.stId.toString);
-                if (m.mutation.canFind('\n')) {
-                    mutantHtmlTag.addClass("long_mutant" ~ "-" ~ m.stId.toString);
-                } else {
-                    mutantHtmlTag.appendText(m.mutation);
-                }
-            }
-
-            auto testCases = ctx.getTestCaseInfo(m.stId);
-            if (testCases.empty) {
-                mut_data.put(format(`g_muts_data['%s'] = {'kind' : %s, 'kindGroup' : %s, 'status' : %s, 'testCases' : null, 'orgText' : %s, 'mutText' : %s, 'meta' : '%s', 'size' : %d};`,
-                        m.stId, m.mut.kind.to!int, toUser(m.mut.kind).to!int,
-                        m.mut.status.to!ubyte, toJson(window(m.txt.original)),
-                        toJson(window(m.txt.mutation)), metadata.kindToString,
-                        m.txt.mutation.length));
+        foreach (m; s.muts.filter!(a => a.stId !in onlyOnce)) {
+            onlyOnce.add(m.stId);
+            auto mutantHtmlTag = d0.addChild("span").addClass("mutant")
+                .setAttribute("id", m.stId.toString);
+            if (m.mutation.canFind('\n')) {
+                mutantHtmlTag.addClass("long_mutant" ~ "-" ~ m.stId.toString);
             } else {
-                mut_data.put(format(`g_muts_data['%s'] = {'kind' : %s, 'kindGroup' : %s, 'status' : %s, 'testCases' : [%('%s',%)'], 'orgText' : %s, 'mutText' : %s, 'meta' : '%s', 'size' : %d};`,
-                        m.stId, m.mut.kind.to!int, toUser(m.mut.kind).to!int,
-                        m.mut.status.to!ubyte, testCases.map!(a => a.name),
-                        toJson(window(m.txt.original)), toJson(window(m.txt.mutation)),
-                        metadata.kindToString, m.txt.mutation.length));
+                mutantHtmlTag.appendText(m.mutation);
             }
         }
 
