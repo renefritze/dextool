@@ -12,6 +12,8 @@ module dextool.plugin.mutate.backend.report.html;
 import logger = std.experimental.logger;
 import std.algorithm : max, each, map, min, canFind, sort, filter, joiner;
 import std.array : Appender, appender, array, empty;
+import std.container : RedBlackTree, redBlackTree;
+import std.conv;
 import std.datetime : dur, days, Clock;
 import std.exception : collectException;
 import std.format : format;
@@ -21,7 +23,6 @@ import std.range : only;
 import std.stdio : File;
 import std.typecons : tuple, Tuple;
 import std.utf : toUTF8, byChar;
-import std.conv;
 
 import arsd.dom : Document, Element, require, Table, RawSource, Link;
 import my.actor;
@@ -187,7 +188,6 @@ auto tokenize(AbsolutePath base_dir, Path f) @trusted {
 }
 
 struct FileMutant {
-nothrow:
     static struct Text {
         /// the original text that covers the offset.
         string original;
@@ -200,7 +200,7 @@ nothrow:
     Text txt;
     Mutation mut;
 
-    this(MutationStatusId stId, Offset offset, string original, string mutation, Mutation mut) {
+    this(MutationStatusId stId, Offset offset, string original, string mutation, Mutation mut) nothrow {
         import std.utf : validate;
         import dextool.plugin.mutate.backend.type : invalidUtf8;
 
@@ -227,7 +227,7 @@ nothrow:
         }
     }
 
-    this(MutationStatusId stId, Offset offset, string original) {
+    this(MutationStatusId stId, Offset offset, string original) nothrow {
         this(stId, offset, original, null, Mutation.init);
     }
 
@@ -239,7 +239,7 @@ nothrow:
         return txt.mutation;
     }
 
-    int opCmp(ref const typeof(this) s) const @safe {
+    int opCmp(ref const typeof(this) s) const nothrow @safe {
         if (offset.begin > s.offset.begin)
             return 1;
         if (offset.begin < s.offset.begin)
@@ -249,6 +249,23 @@ nothrow:
         if (offset.end < s.offset.end)
             return -1;
         return 0;
+    }
+
+    import std.range : isOutputRange;
+
+    string toString() @safe pure const {
+        import std.array : appender;
+
+        auto buf = appender!string;
+        toString(buf);
+        return buf.data;
+    }
+
+    void toString(Writer)(ref Writer w) const if (isOutputRange!(Writer, char)) {
+        import std.format : formattedWrite;
+
+        formattedWrite(w, "FileMutant(stId:%s Offset:%s Text:%s Mutation:%s)",
+                stId, offset, txt, mut);
     }
 }
 
@@ -276,13 +293,10 @@ a <href> tag to the beginning to jump to the mutant.
 /** Provide an interface to travers the tokens and get the overlapping mutants.
  */
 struct Spanner {
-    import std.container : RedBlackTree, redBlackTree;
     import std.range : isOutputRange;
 
-    alias BTree(T) = RedBlackTree!(T, "a < b", true);
-
-    BTree!Token tokens;
-    BTree!(FileMutant*) muts;
+    RedBlackTree!(Token, "a < b", true) tokens;
+    RedBlackTree!(FileMutant*, "*a < *b", true) muts;
 
     this(Token[] tokens) @trusted {
         this.tokens = new typeof(this.tokens);
@@ -363,12 +377,11 @@ struct Spanner {
  * |--M--------|
  */
 struct SpannerRange {
-    alias BTree = Spanner.BTree;
+    RedBlackTree!(Token, "a < b", true) tokens;
+    RedBlackTree!(FileMutant*, "*a < *b", true) muts;
 
-    BTree!Token tokens;
-    BTree!(FileMutant*) muts;
-
-    this(BTree!Token tokens, BTree!(FileMutant*) muts) @safe {
+    this(RedBlackTree!(Token, "a < b", true) tokens,
+            RedBlackTree!(FileMutant*, "*a < *b", true) muts) @safe {
         this.tokens = tokens;
         this.muts = muts;
         dropMutants;
