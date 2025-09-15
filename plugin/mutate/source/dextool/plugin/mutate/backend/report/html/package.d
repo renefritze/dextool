@@ -10,7 +10,7 @@ one at http://mozilla.org/MPL/2.0/.
 module dextool.plugin.mutate.backend.report.html;
 
 import logger = std.experimental.logger;
-import std.algorithm : max, each, map, min, canFind, sort, filter, joiner;
+import std.algorithm : max, each, map, min, canFind, sort, filter, joiner, until;
 import std.array : Appender, appender, array, empty;
 import std.container : RedBlackTree, redBlackTree;
 import std.conv;
@@ -420,7 +420,7 @@ struct SpannerRange {
 
         // removing mutants that the tokens have "passed by"
         const t = tokens.front;
-        auto r = muts[].filter!(a => a.offset.end <= t.offset.begin).array;
+        auto r = muts[].until!(a => a.offset.begin > t.offset.end).filter!(a => a.offset.end <= t.offset.begin).array;
         muts.removeKey(r);
     }
 }
