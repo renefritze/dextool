@@ -1,5 +1,8 @@
 # vNext
 
+Fixes
+* Small optimization for mutation testing HTML report generator, about 5-10%.
+
 # v5.3 Chert
 
 Fixes
