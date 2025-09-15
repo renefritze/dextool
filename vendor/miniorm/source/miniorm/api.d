@@ -596,17 +596,32 @@ struct RefCntStatement {
         }
 
         ~this() nothrow {
+            import core.thread : Thread;
+            import core.time : dur;
+
             if (stmt is null)
                 return;
 
-            try {
-                (*stmt).stmt.clearBindings;
-                (*stmt).stmt.reset;
-            } catch (Exception e) {
-                logger.info(e.msg).collectException;
+            string msg;
+            // assuming the database is basically broken if it fails 100 times
+            foreach (i; 0 .. 100) {
+                try {
+                    (*stmt).stmt.clearBindings;
+                    (*stmt).stmt.reset;
+                    stmt.count--;
+                    stmt = null;
+                    return;
+                } catch (Exception e) {
+                    msg = e.msg;
+                    logger.trace("Database failed to clear and free a prepared statement: ",
+                            msg).collectException;
+                }
+                Thread.sleep((i * 5).dur!"msecs");
             }
+
             stmt.count--;
             stmt = null;
+            logger.info(msg).collectException;
         }
     }
 
