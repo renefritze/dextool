@@ -498,7 +498,6 @@ private auto spawnGenSchema(GenSchemaActor.Impl self, AbsolutePath dbPath,
                         (FileId id) => spinSql!(() => ctx.db.getFile(id)),
                         (MutationStatusId id) => spinSql!(() => ctx.db.mutantApi.getKind(id)));
                 });
-                logger.trace("Files left foo").collectException;
             }
         }
 
