@@ -39,7 +39,7 @@ import dextool.plugin.mutate.backend.database : MutationStatusId, Database,
 import dextool.plugin.mutate.backend.interface_ : FilesysIO;
 import dextool.plugin.mutate.backend.test_mutant.common : TestCaseAnalyzer,
     TestStopCheck, MutationTestResult, MutantTimeProfile, PrintCompileOnFailure;
-import dextool.plugin.mutate.backend.test_mutant.common_actors : DbSaveActor, StatActor;
+import dextool.plugin.mutate.backend.test_mutant.common_actors : DbActor, StatActor, GetWorklist;
 import dextool.plugin.mutate.backend.test_mutant.test_cmd_runner : TestRunner, TestResult;
 import dextool.plugin.mutate.backend.test_mutant.timeout : TimeoutFsm, TimeoutConfig;
 import dextool.plugin.mutate.backend.type : Language, SourceLoc, Offset,
@@ -56,6 +56,9 @@ import dextool.plugin.mutate.backend.test_mutant.schemata.builder;
 
 private {
     struct Init {
+    }
+
+    struct InitWorklist {
     }
 
     struct GenSchema {
@@ -110,6 +113,7 @@ struct FinalResult {
 // dfmt off
 alias SchemaActor = typedActor!(
     void function(Init, AbsolutePath database, ShellCommand, Duration),
+    void function(InitWorklist),
     /// Generate a schema, if possible
     void function(GenSchema),
     void function(RunSchema, SchemataBuilder.ET, InjectIdResult),
@@ -128,11 +132,11 @@ alias SchemaActor = typedActor!(
 auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
         AbsolutePath dbPath, TestCaseAnalyzer testCaseAnalyzer,
         ConfigSchema conf, TestStopCheck stopCheck, ShellCommand buildCmd, Duration buildCmdTimeout,
-        DbSaveActor.Address dbSave, StatActor.Address stat, TimeoutConfig timeoutConf) @trusted {
+        DbActor.Address dbSave, StatActor.Address stat, TimeoutConfig timeoutConf) @trusted {
 
     static struct State {
         TestStopCheck stopCheck;
-        DbSaveActor.Address dbSave;
+        DbActor.Address dbSave;
         StatActor.Address stat;
         TimeoutConfig timeoutConf;
         FilesysIO fio;
@@ -192,12 +196,27 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
                     dbPath, ctx.state.conf, ctx.state.sizeQUpdater);
             linkTo(ctx.self, ctx.state.genSchema);
 
-            send(ctx.self, UpdateWorkList.init);
-            send(ctx.self, GenSchema.init);
+            send(ctx.self, InitWorklist.init);
             ctx.state.isRunning = true;
         } catch (Exception e) {
             ctx.state.hasFatalError = true;
             logger.error(e.msg).collectException;
+        }
+    }
+
+    static void initWorklist(ref Ctx ctx, InitWorklist _) @trusted nothrow {
+        try {
+            ctx.self.request(ctx.state.dbSave, infTimeout)
+                .send(GetWorklist.init).capture(ctx).then((ref Ctx ctx, MutationStatusId[] v) {
+                ctx.state.whiteList = v.toSet;
+                send(ctx.state.genSchema, v);
+                send(ctx.self, UpdateWorkList.init);
+                send(ctx.self, GenSchema.init);
+            });
+        } catch (Exception e) {
+            logger.error(e.msg).collectException;
+            ctx.state.hasFatalError = true;
+            send(ctx.self, Stop.init).collectException;
         }
     }
 
@@ -333,16 +352,18 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
         }
     }
 
-    static void updateWlist(ref Ctx ctx, UpdateWorkList _) @safe nothrow {
+    static void updateWlist(ref Ctx ctx, UpdateWorkList _) @trusted nothrow {
         try {
             if (ctx.state.borrow!((ref a) => !a.isRunning))
                 return;
 
-            ctx.state.whiteList = spinSql!(() => ctx.db.worklistApi.getAll.map!"a.id".toSet);
-            ctx.state.borrow!((ref a) => send(a.genSchema, a.whiteList.toArray));
-
-            logger.trace("update schema worklist: ", ctx.state.whiteList.length);
-            debug logger.trace("update schema worklist: ", ctx.state.whiteList.toRange);
+            ctx.self.request(ctx.state.dbSave, infTimeout)
+                .send(GetWorklist.init).capture(ctx).then((ref Ctx ctx, MutationStatusId[] v) {
+                ctx.state.whiteList = v.toSet;
+                logger.trace("complete worklist: ", ctx.state.whiteList.length);
+                debug logger.trace("complete worklist: ", ctx.state.whiteList.toRange);
+                ctx.state.borrow!((ref a) => send(a.genSchema, a.whiteList.toArray));
+            });
         } catch (Exception e) {
             logger.trace(e.msg).collectException;
         }
@@ -392,8 +413,8 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
         self.shutdown;
     }
 
-    return impl(self, st, &init_, &isDone, &updateWlist, &doneStatus,
-            &mark, &checkHaltCond, &generateSchema, &runSchema, &stop);
+    return impl(self, st, &init_, &initWorklist, &isDone, &updateWlist,
+            &doneStatus, &mark, &checkHaltCond, &generateSchema, &runSchema, &stop);
 }
 
 private SchemaSizeQ getSchemaSizeQ(ref Database db, const long userInit, const long minSize) @trusted nothrow {
@@ -599,9 +620,9 @@ alias SchemaSizeQUpdateActor = typedActor!(
 // dfmt on
 
 private auto spawnSchemaSizeQ(SchemaSizeQUpdateActor.Impl self,
-        SchemaSizeQ sizeQ, DbSaveActor.Address dbSave) @trusted {
+        SchemaSizeQ sizeQ, DbActor.Address dbSave) @trusted {
     static struct State {
-        DbSaveActor.Address dbSave;
+        DbActor.Address dbSave;
         // state of the sizeq algorithm.
         SchemaSizeQ sizeQ;
         // number of scheman that has been generated.
@@ -689,11 +710,11 @@ alias SchemaTestActor = typedActor!(
 auto spawnSchemaTester(SchemaTestActor.Impl self, FilesysIO fio,
         ref TestRunner runner, TestCaseAnalyzer testCaseAnalyzer, ConfigSchema conf,
         TestStopCheck stopCheck, ShellCommand buildCmd, Duration buildCmdTimeout, AbsolutePath dbPath,
-        DbSaveActor.Address dbSave, StatActor.Address stat, TimeoutConfig timeoutConf) @trusted {
+        DbActor.Address dbSave, StatActor.Address stat, TimeoutConfig timeoutConf) @trusted {
 
     static struct State {
         TestStopCheck stopCheck;
-        DbSaveActor.Address dbSave;
+        DbActor.Address dbSave;
         StatActor.Address stat;
         TimeoutConfig timeoutConf;
         FilesysIO fio;
@@ -1038,7 +1059,7 @@ auto spawnSchemaTester(SchemaTestActor.Impl self, FilesysIO fio,
         }
     }
 
-    static void updateWlist(ref Ctx ctx, UpdateWorkListMsg _) @safe nothrow {
+    static void updateWlist(ref Ctx ctx, UpdateWorkListMsg _) @trusted nothrow {
         try {
             if (ctx.state.borrow!((ref a) => !a.isRunning))
                 return;
@@ -1048,13 +1069,18 @@ auto spawnSchemaTester(SchemaTestActor.Impl self, FilesysIO fio,
             // locks.
             delayedSend(ctx.self, uniform(45, 60).dur!"seconds".delay, UpdateWorkListMsg.init);
 
-            auto whiteList = spinSql!(() => ctx.db.worklistApi.getAll.map!"a.id".toSet);
+            ctx.self.request(ctx.state.dbSave, infTimeout)
+                .send(GetWorklist.init).capture(ctx).then((ref Ctx ctx, MutationStatusId[] workList) {
+                auto whiteList = workList.toSet;
+                const oldWlistLen = ctx.state.injectIds.ids.length;
+                ctx.state.injectIds.ids = ctx.state.injectIds.ids.filter!(a => a.statusId in whiteList)
+                    .array;
 
-            ctx.state.injectIds.ids = ctx.state.injectIds.ids.filter!(a => a.statusId in whiteList)
-                .array;
-
-            logger.trace("removed mutants not in whitelist: ", ctx.state.injectIds.length);
-            debug logger.trace("update schema worklist: ", whiteList.toRange);
+                logger.tracef("schema worklist:%s removed from worklist:%s",
+                    ctx.state.injectIds.length, oldWlistLen - ctx.state.injectIds.length);
+                logger.trace("schema worklist: ", ctx.state.injectIds.ids);
+                debug logger.trace("complete worklist: ", whiteList.toRange);
+            });
         } catch (Exception e) {
             // only happens if the database is broken. Other message handlers
             // will terminate cleaner.

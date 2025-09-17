@@ -36,12 +36,12 @@ import proc : DrainElement;
 static import my.fsm;
 
 import dextool.plugin.mutate.backend.database : Database, MutationEntry,
-    NextMutationEntry, TestFile, ChecksumTestCmdOriginal;
+    NextMutationEntry, TestFile, ChecksumTestCmdOriginal, MutationStatusId;
 import dextool.plugin.mutate.backend.interface_ : FilesysIO;
 import dextool.plugin.mutate.backend.test_mutant.common;
 import dextool.plugin.mutate.backend.test_mutant.test_cmd_runner : TestRunner,
     findExecutables, TestRunResult = TestResult;
-import dextool.plugin.mutate.backend.test_mutant.common_actors : DbSaveActor, StatActor;
+import dextool.plugin.mutate.backend.test_mutant.common_actors : DbActor, StatActor, GetWorklist;
 import dextool.plugin.mutate.backend.test_mutant.timeout : TimeoutFsm;
 import dextool.plugin.mutate.backend.type : Mutation, TestCase, ExitStatus;
 import dextool.plugin.mutate.config;
@@ -219,7 +219,7 @@ struct TestDriver {
     System* system;
 
     /// Async communication with the database
-    DbSaveActor.Address dbSave;
+    DbActor.Address dbSave;
 
     /// Async stat update from the database every 30s.
     StatActor.Address stat;
@@ -665,7 +665,7 @@ nothrow:
             .collectException;
 
         try {
-            dbSave = system.spawn(&spawnDbSaveActor, dbPath);
+            dbSave = system.spawn(&spawnDbActor, dbPath);
             stat = system.spawn(&spawnStatActor, dbPath);
         } catch (Exception e) {
             logger.error(e.msg).collectException;
@@ -1720,12 +1720,15 @@ ulong toMinMemory(double percentageOfTotal) {
             _SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE));
 }
 
-auto spawnDbSaveActor(DbSaveActor.Impl self, AbsolutePath dbPath) @trusted {
+auto spawnDbActor(DbActor.Impl self, AbsolutePath dbPath) @trusted {
     import dextool.plugin.mutate.backend.analyze.schema_ml : SchemaQ, SchemaSizeQ;
     import dextool.plugin.mutate.backend.test_mutant.common_actors : Init, IsDone;
 
     static struct State {
         Database db;
+
+        MutationStatusId[] workList;
+        SysTime nextWorklistUpdate;
     }
 
     auto st = tuple!("self", "state")(self, refCounted(State.init));
@@ -1734,6 +1737,7 @@ auto spawnDbSaveActor(DbSaveActor.Impl self, AbsolutePath dbPath) @trusted {
     static void init_(ref Ctx ctx, Init _, AbsolutePath dbPath) nothrow {
         try {
             ctx.state.db = spinSql!(() => Database.make(dbPath), silentLog)(dbOpenTimeout);
+            ctx.state.nextWorklistUpdate = Clock.currTime;
         } catch (Exception e) {
             logger.error(e.msg).collectException;
             ctx.self.shutdown;
@@ -1786,6 +1790,14 @@ auto spawnDbSaveActor(DbSaveActor.Impl self, AbsolutePath dbPath) @trusted {
         spinSql!(() { ctx.state.db.schemaApi.saveSchemaSize(result.currentSize); });
     }
 
+    static MutationStatusId[] workList(ref Ctx ctx, GetWorklist _) @safe nothrow {
+        if (Clock.currTime > ctx.state.nextWorklistUpdate) {
+            ctx.state.nextWorklistUpdate = Clock.currTime + 30.dur!"seconds";
+            ctx.state.workList = spinSql!(() => ctx.state.db.worklistApi.getAll).map!"a.id".array;
+        }
+        return ctx.state.workList;
+    }
+
     static bool isDone(ref Ctx ctx, IsDone _) @safe nothrow {
         // the mailbox is a FIFO queue. all results have been saved if this returns true.
         return true;
@@ -1793,7 +1805,7 @@ auto spawnDbSaveActor(DbSaveActor.Impl self, AbsolutePath dbPath) @trusted {
 
     self.name = "db";
     send(self, Init.init, dbPath);
-    return impl(self, st, &init_, &save, &save2, &isDone, &save3, &save4);
+    return impl(self, st, &init_, &save, &save2, &isDone, &save3, &save4, &workList);
 }
 
 auto spawnStatActor(StatActor.Impl self, AbsolutePath dbPath) @trusted {

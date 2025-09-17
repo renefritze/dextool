@@ -13,7 +13,7 @@ import my.actor : typedActor;
 import my.path : AbsolutePath;
 
 import dextool.plugin.mutate.backend.analyze.schema_ml : SchemaQ, SchemaSizeQ;
-import dextool.plugin.mutate.backend.database : dbOpenTimeout;
+import dextool.plugin.mutate.backend.database : dbOpenTimeout, MutationStatusId;
 import dextool.plugin.mutate.backend.test_mutant.common : MutationTestResult;
 import dextool.plugin.mutate.backend.test_mutant.timeout : TimeoutFsm;
 
@@ -27,9 +27,12 @@ struct Init {
 struct IsDone {
 }
 
+struct GetWorklist {
+}
+
 // Save test results to the database.
 // dfmt off
-alias DbSaveActor = typedActor!(
+alias DbActor = typedActor!(
         // init the actor by opening the database.
         void function(Init, AbsolutePath dbPath),
         // save the result to the database
@@ -37,6 +40,7 @@ alias DbSaveActor = typedActor!(
         void function(MutationTestResult result, long timeoutIter),
         void function(SchemaQ),
         void function(SchemaSizeQ),
+        MutationStatusId[] function(GetWorklist),
         // query if it has finished saving to the db.
         bool function(IsDone));
 // dfmt on
