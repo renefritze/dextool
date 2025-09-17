@@ -32,7 +32,7 @@ import dextool.plugin.mutate.backend.database : MutationStatusId, Database,
     spinSql, SchemataId, Schemata, FileId;
 import dextool.plugin.mutate.backend.interface_ : FilesysIO;
 import dextool.plugin.mutate.backend.test_mutant.common;
-import dextool.plugin.mutate.backend.test_mutant.common_actors : DbSaveActor, StatActor;
+import dextool.plugin.mutate.backend.test_mutant.common_actors : DbActor, StatActor;
 import dextool.plugin.mutate.backend.test_mutant.test_cmd_runner : TestRunner, TestResult;
 import dextool.plugin.mutate.backend.test_mutant.timeout : TimeoutFsm, TimeoutConfig;
 import dextool.plugin.mutate.backend.type : Language, SourceLoc, Offset,
