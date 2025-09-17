@@ -613,7 +613,7 @@ struct RefCntStatement {
                     return;
                 } catch (Exception e) {
                     msg = e.msg;
-                    logger.trace("Database failed to clear and free a prepared statement: ",
+                    debug logger.trace("Database failed to clear and free a prepared statement: ",
                             msg).collectException;
                 }
                 Thread.sleep((i * 5).dur!"msecs");
