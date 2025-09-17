@@ -26,5 +26,6 @@ steps:
 - script: |
     set -ex
     export PATH="$DC_PATH:$PATH"
-    ./Docker/docker.d --group $TEST_GROUP
+    ldmd2 ./Docker/docker.d
+    ./docker --group $TEST_GROUP
   displayName: Run docker
