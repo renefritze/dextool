@@ -1517,10 +1517,10 @@ nothrow:
                 bool waiting = true;
                 while (waiting) {
                     try {
-                        self.request(driver, 30.dur!"seconds".timeout)
+                        self.request(driver, 10.dur!"minutes".timeout)
                             .send(IsDone.init).then((bool x) { waiting = !x; });
                     } catch (ScopedActorException e) {
-                        if (e.error != ScopedActorError.timeout) {
+                        if (e.error.among(ScopedActorError.down, ScopedActorError.fatal)) {
                             logger.warningf("ScopedActor error: %s", e.error);
                             return;
                         }
