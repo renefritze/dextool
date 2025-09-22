@@ -1,11 +1,13 @@
 # vNext
 
 Fixes
-* Small optimization for mutation testing HTML report generator, about 5-10%.
-* A sever runtime but was found when using mutant schemata. The tool stopped
-  using schematan after 30s. This lead to a significant slowdown. It is now
-  fixed. Scheman are injected and executed until all mutants in the schema is
-  tested.
+ * Small optimization for mutation testing HTML report generator, about 5-10%.
+ * A sever runtime but was found when using mutant schemata. The tool stopped
+   using schematan after 30s. This lead to a significant slowdown. It is now
+   fixed. Scheman are injected and executed until all mutants in the schema is
+   tested.
+ * Made writing mutants to the database 10x faster. It was found to be
+   prohibitly slow for large source code files.
 
 # v5.3 Chert
 
