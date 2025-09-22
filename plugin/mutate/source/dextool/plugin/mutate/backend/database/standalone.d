@@ -33,7 +33,7 @@ import std.regex : Regex, matchFirst;
 import std.typecons : Nullable, Flag, No, SafeRefCounted, safeRefCounted,
     RefCountedAutoInitialize;
 
-import d2sqlite3 : SqlDatabase = Database;
+import d2sqlite3 : SqlDatabase = Database, SqliteException;
 import miniorm : Miniorm, select, insert, insertOrReplace, delete_,
     insertOrIgnore, toSqliteDateTime, fromSqLiteDateTime, Bind;
 import my.named_type;
@@ -54,6 +54,7 @@ import dextool.plugin.mutate.type : MutationOrder;
 struct Database {
     public {
         SafeRefCounted!(Miniorm, RefCountedAutoInitialize.no) db_;
+
         DbCoverage dbCoverage_;
         DbDependency dbDependency_;
         DbFile dbFile_;
@@ -1639,10 +1640,16 @@ struct DbMutant {
         if (mps.empty)
             return;
 
+        static struct MutationPoint {
+            Path file;
+            Offset offset;
+        }
+
+        long[MutationPoint] pointId;
         static immutable insert_mp_sql = "INSERT OR IGNORE INTO " ~ mutationPointTable ~ "
-            (file_id, offset_begin, offset_end, line, column, line_end, column_end)
-            SELECT id,:begin,:end,:line,:column,:line_end,:column_end
-            FROM " ~ filesTable ~ " WHERE path = :path";
+        (file_id, offset_begin, offset_end, line, column, line_end, column_end)
+        SELECT id,:begin,:end,:line,:column,:line_end,:column_end
+        FROM " ~ filesTable ~ " WHERE path = :path";
         auto mp_stmt = db.prepare(insert_mp_sql);
 
         foreach (mp; mps) {
@@ -1655,45 +1662,94 @@ struct DbMutant {
             mp_stmt.get.bind(":column_end", mp.slocEnd.column);
             mp_stmt.get.bind(":path", cast(string) rel_file);
             mp_stmt.get.execute;
+
+            auto key = MutationPoint(mp.file, mp.offset);
+            if (key !in pointId) {
+                if (auto id = wrapperDb.mutantApi.getMutationPoint(mp.file, mp.offset))
+                    pointId[key] = id;
+            }
+
             mp_stmt.get.reset;
         }
 
+        long[MutationPoint] statusId;
         static immutable insert_cmut_sql = "INSERT OR IGNORE INTO " ~ mutationStatusTable
             ~ " (id,status,exit_code,compile_time_ms,test_time_ms,update_ts,added_ts,prio)
-            VALUES(:cs,:st,0,0,0,:update_ts,:added_ts,:prio)";
+        VALUES(:cs,:st,0,0,0,:update_ts,:added_ts,:prio)";
         auto cmut_stmt = db.prepare(insert_cmut_sql);
         const ts = Clock.currTime.toSqliteDateTime;
         cmut_stmt.get.bind(":st", Mutation.Status.unknown);
         cmut_stmt.get.bind(":update_ts", ts);
         cmut_stmt.get.bind(":added_ts", ts);
+
         foreach (mp; mps) {
             const prio = (mp.offset.begin < mp.offset.end) ? mp.offset.end - mp.offset.begin : 0;
             cmut_stmt.get.bind(":cs", cast(long) mp.cm.id.c0);
             cmut_stmt.get.bind(":prio", prio);
             cmut_stmt.get.execute;
+            statusId[MutationPoint(mp.file, mp.offset)] = 1;
             cmut_stmt.get.reset;
         }
 
-        static immutable insert_m_sql = "INSERT OR IGNORE INTO "
+        static immutable insert_slow_m_sql = "INSERT OR IGNORE INTO "
             ~ mutationTable ~ " (mp_id, st_id, kind)
-            SELECT t0.id,:cs,:kind FROM " ~ mutationPointTable ~ " t0, "
+        SELECT t0.id,:cs,:kind FROM " ~ mutationPointTable ~ " t0, "
             ~ mutationStatusTable ~ " t1, " ~ filesTable ~ " t2 WHERE
-            t2.path = :path AND
-            t0.file_id = t2.id AND
-            t0.offset_begin = :off_begin AND
-            t0.offset_end = :off_end";
-        auto insert_m = db.prepare(insert_m_sql);
+        t2.path = :path AND
+        t0.file_id = t2.id AND
+        t0.offset_begin = :off_begin AND
+        t0.offset_end = :off_end";
+        static immutable insert_fast_m_sql = "INSERT OR IGNORE INTO "
+            ~ mutationTable ~ " (mp_id, st_id, kind) VALUES(:mp_id, :st_id, :kind)";
+        auto insert_slow_m = db.prepare(insert_slow_m_sql);
+        auto insert_fast_m = db.prepare(insert_fast_m_sql);
+
+        void slowQuery(ref MutationPointEntry2 mp) {
+            auto rel_file = relativePath(mp.file, root).Path;
+            insert_slow_m.get.bind(":path", cast(string) rel_file);
+            insert_slow_m.get.bind(":off_begin", mp.offset.begin);
+            insert_slow_m.get.bind(":off_end", mp.offset.end);
+            insert_slow_m.get.bind(":cs", cast(long) mp.cm.id.c0);
+            insert_slow_m.get.bind(":kind", mp.cm.mut.kind);
+            insert_slow_m.get.execute;
+            insert_slow_m.get.reset;
+        }
 
         foreach (mp; mps) {
-            auto rel_file = relativePath(mp.file, root).Path;
-            insert_m.get.bind(":path", cast(string) rel_file);
-            insert_m.get.bind(":off_begin", mp.offset.begin);
-            insert_m.get.bind(":off_end", mp.offset.end);
-            insert_m.get.bind(":cs", cast(long) mp.cm.id.c0);
-            insert_m.get.bind(":kind", mp.cm.mut.kind);
-            insert_m.get.execute;
-            insert_m.get.reset;
+            auto key = MutationPoint(mp.file, mp.offset);
+            auto mpId = key in pointId;
+            auto hasStatusId = key in statusId;
+            if (mpId !is null && hasStatusId !is null) {
+                try {
+                    insert_fast_m.get.bind(":mp_id", *mpId);
+                    insert_fast_m.get.bind(":st_id", cast(long) mp.cm.id.c0);
+                    insert_fast_m.get.bind(":kind", mp.cm.mut.kind);
+                    insert_fast_m.get.execute;
+                    insert_fast_m.get.reset;
+                } catch (SqliteException e) {
+                    // shouldn't happen but there may be cases that are hard to
+                    // test that haven't been found yet so keeping this
+                    // defensive code.
+                    logger.trace("database.mutantApi.put: ", e.msg);
+                    slowQuery(mp);
+                }
+            } else {
+                slowQuery(mp);
+            }
         }
+    }
+
+    long getMutationPoint(Path file, Offset offset) @trusted {
+        static immutable sql = "SELECT t0.id FROM " ~ mutationPointTable ~ " t0," ~ filesTable ~ " t1 WHERE "
+            ~ " t1.path = :path AND t0.file_id = t1.id AND t0.offset_begin = :begin AND t0.offset_end = :end";
+        auto stmt = db.prepare(sql);
+        stmt.get.bind(":path", cast(string) file);
+        stmt.get.bind(":begin", offset.begin);
+        stmt.get.bind(":end", offset.end);
+        auto res = stmt.get.execute;
+        if (res.empty)
+            return 0;
+        return res.oneValue!long;
     }
 
     /// Remove mutants that have no connection to a mutation point, orphaned mutants.
