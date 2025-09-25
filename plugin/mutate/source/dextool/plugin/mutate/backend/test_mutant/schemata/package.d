@@ -101,8 +101,11 @@ struct GetDoneStatus {
 struct FinalResult {
     enum Status {
         noSchema,
+        // a fatal error when using the schema occured
         fatalError,
+        // the schema failed to compile or run tests
         invalidSchema,
+        // successfully compiled and executed
         ok
     }
 
@@ -133,6 +136,7 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
         AbsolutePath dbPath, TestCaseAnalyzer testCaseAnalyzer,
         ConfigSchema conf, TestStopCheck stopCheck, ShellCommand buildCmd, Duration buildCmdTimeout,
         DbActor.Address dbSave, StatActor.Address stat, TimeoutConfig timeoutConf) @trusted {
+    static immutable ConsecutiveSchemaFailStopCondition = 10;
 
     static struct State {
         TestStopCheck stopCheck;
@@ -149,6 +153,7 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
 
         GenSchemaActor.Address genSchema;
         SchemaSizeQUpdateActor.Address sizeQUpdater;
+        int consecutiveFailedSchemas;
 
         ShellCommand buildCmd;
         Duration buildCmdTimeout;
@@ -232,8 +237,17 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
             ctx.self.request(ctx.state.genSchema, infTimeout)
                 .send(GenSchema.init).capture(ctx).then((ref Ctx ctx, GenSchemaResult result) nothrow{
                 try {
-                    if (result.noMoreScheman) {
+                    if (spinSql!(() => ctx.db.worklistApi.getCount) == 0) {
                         send(ctx.self, Stop.init);
+                    } else if (result.noMoreScheman
+                        && ctx.state.consecutiveFailedSchemas >= ConsecutiveSchemaFailStopCondition) {
+                        send(ctx.self, Stop.init);
+                    } else if (result.noMoreScheman) {
+                        ctx.state.consecutiveFailedSchemas++;
+                        logger.infof("Restart schema generator (%s/%s)",
+                            ctx.state.consecutiveFailedSchemas, ConsecutiveSchemaFailStopCondition);
+                        send(ctx.state.genSchema, Restart.init);
+                        send(ctx.self, GenSchema.init);
                     } else {
                         send(ctx.self, RunSchema.init, result.schema, result.injectIds);
                     }
@@ -254,6 +268,7 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
                 return;
             }
             if (ctx.state.borrow!((ref a) => schema.checksum.value in a.usedScheman)) {
+                logger.trace("Discarding schema");
                 // discard, already used
                 send(ctx.self, GenSchema.init);
                 return;
@@ -271,6 +286,7 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
             if (injectIds.empty
                     || injectIds.length < ctx.state.borrow!(
                         (ref a) => a.conf.minMutantsPerSchema.get)) {
+                logger.trace("Discarding schema");
                 send(ctx.self, GenSchema.init);
             } else {
                 auto tester = ctx.self.homeSystem.spawn(&spawnSchemaTester,
@@ -327,15 +343,17 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
             sq.scatterTick;
         }
 
-        SchemaStatus schemaStatus = () {
+        SchemaStatus schemaStatus = () nothrow{
             final switch (status) with (FinalResult.Status) {
             case fatalError:
                 goto case;
             case invalidSchema:
+                ctx.state.consecutiveFailedSchemas++;
                 return SchemaStatus.broken;
             case noSchema:
-                goto case;
+                return SchemaStatus.ok;
             case ok:
+                ctx.state.consecutiveFailedSchemas = 0;
                 // TODO: remove SchemaStatus.allKilled
                 return SchemaStatus.ok;
             }
@@ -343,10 +361,12 @@ auto spawnSchema(SchemaActor.Impl self, FilesysIO fio, ref TestRunner runner,
 
         try {
             auto schemaQ = spinSql!(() => SchemaQ(ctx.db.schemaApi.getMutantProbability));
-            ctx.state.borrow!((ref a) => updateSchemaQ(schemaQ, a.activeSchema, schemaStatus));
-            ctx.state.borrow!((ref a) => send(a.dbSave, schemaQ));
-            ctx.state.borrow!((ref a) => send(a.sizeQUpdater, SchemaGenStatusMsg.init,
-                    schemaStatus, cast(long) a.activeSchema.mutants.length));
+            ctx.state.borrow!((ref a) {
+                updateSchemaQ(schemaQ, a.activeSchema, schemaStatus);
+                send(a.dbSave, schemaQ);
+                send(a.sizeQUpdater, SchemaGenStatusMsg.init, schemaStatus,
+                    cast(long) a.activeSchema.mutants.length);
+            });
         } catch (Exception e) {
             logger.trace(e.msg).collectException;
         }
@@ -434,6 +454,9 @@ private {
         SchemataBuilder.ET schema;
         InjectIdResult injectIds;
     }
+
+    struct Restart {
+    };
 }
 
 // dfmt off
@@ -441,6 +464,7 @@ alias GenSchemaActor = typedActor!(
     void function(Init, AbsolutePath database, ConfigSchema conf),
     GenSchemaResult function(GenSchema),
     void function(MutationStatusId[] whiteList),
+    void function(Restart),
     );
 // dfmt on
 
@@ -459,6 +483,13 @@ private auto spawnGenSchema(GenSchemaActor.Impl self, AbsolutePath dbPath,
             sizeQUpdater)), Database.init);
     alias Ctx = typeof(st);
 
+    static void restart(ref Ctx ctx, Restart _) {
+        ctx.state.schemaBuild = typeof(ctx.state.schemaBuild).init;
+        ctx.state.schemaBuild.minMutantsPerSchema = ctx.state.conf.minMutantsPerSchema;
+        ctx.state.schemaBuild.mutantsPerSchema.get = ctx.state.conf.mutantsPerSchema.get;
+        ctx.state.schemaBuild.initFiles(spinSql!(() => ctx.db.fileApi.getFileIds));
+    }
+
     static void init_(ref Ctx ctx, Init _, AbsolutePath dbPath, ConfigSchema conf) nothrow {
         import dextool.plugin.mutate.backend.database : dbOpenTimeout;
 
@@ -468,9 +499,7 @@ private auto spawnGenSchema(GenSchemaActor.Impl self, AbsolutePath dbPath,
             ctx.state.denyList = spinSql!(() => ctx.db.mutantApi.getAllMutationStatus(
                     Mutation.Status.killedByCompiler)).toSet;
 
-            ctx.state.schemaBuild.minMutantsPerSchema = ctx.state.conf.minMutantsPerSchema;
-            ctx.state.schemaBuild.mutantsPerSchema.get = ctx.state.conf.mutantsPerSchema.get;
-            ctx.state.schemaBuild.initFiles(spinSql!(() => ctx.db.fileApi.getFileIds));
+            restart(ctx, Restart.init);
         } catch (Exception e) {
             logger.error(e.msg).collectException;
             // TODO: should terminate?
@@ -515,9 +544,9 @@ private auto spawnGenSchema(GenSchemaActor.Impl self, AbsolutePath dbPath,
                 frags = spinSql!(() {
                     auto trans = ctx.db.transaction;
                     return ctx.state.schemaBuild.updateFiles(whiteList, denyList,
-                        (FileId id) => spinSql!(() => ctx.db.schemaApi.getFragments(id)),
-                        (FileId id) => spinSql!(() => ctx.db.getFile(id)),
-                        (MutationStatusId id) => spinSql!(() => ctx.db.mutantApi.getKind(id)));
+                        (FileId id) => ctx.db.schemaApi.getFragments(id),
+                        (FileId id) => ctx.db.getFile(id),
+                        (MutationStatusId id) => ctx.db.mutantApi.getKind(id));
                 });
             }
         }
@@ -586,7 +615,7 @@ private auto spawnGenSchema(GenSchemaActor.Impl self, AbsolutePath dbPath,
         self.shutdown;
     }
 
-    return impl(self, st, &init_, &genSchema, &updateWhiteList);
+    return impl(self, st, &init_, &genSchema, &updateWhiteList, &restart);
 }
 
 private {
@@ -928,6 +957,8 @@ auto spawnSchemaTester(SchemaTestActor.Impl self, FilesysIO fio,
     }
 
     static void startTest(ref Ctx ctx, StartTestMsg _) @safe nothrow {
+        ctx.state.result.status = FinalResult.Status.ok;
+
         try {
             ctx.state.activeSchemaCheck = State.ActiveSchemaCheck.noMutantTested;
             foreach (_0; 0 .. ctx.state.scheduler.testers.length)
