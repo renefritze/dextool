@@ -7,7 +7,10 @@ Fixes
    fixed. Scheman are injected and executed until all mutants in the schema is
    tested.
  * Made writing mutants to the database 10x faster. It was found to be
-   prohibitly slow for large source code files.
+   probability slow for large source code files.
+ * The schema test phase when using the `mutate` plugin terminated too early.
+   It is now more aggressive and will restart continuously until it has failed
+   ten times.
 
 # v5.3 Chert
 
