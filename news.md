@@ -11,6 +11,7 @@ Fixes
  * The schema test phase when using the `mutate` plugin terminated too early.
    It is now more aggressive and will restart continuously until it has failed
    ten times.
+ * Support llvm-21
 
 # v5.3 Chert
 

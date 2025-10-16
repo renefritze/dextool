@@ -154,10 +154,65 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_SEHLeaveStmt;
         break;
 
+        // both llvm-20, 21 and 22 have this variable set to 64.
+#if CINDEX_VERSION > 64
+    case Stmt::CoroutineBodyStmtClass:
+    case Stmt::CoreturnStmtClass:
+        K = CXCursor_UnexposedStmt;
+        break;
+
+    case Stmt::ArrayTypeTraitExprClass:
+    case Stmt::AsTypeExprClass:
+    case Stmt::AtomicExprClass:
+    case Stmt::BinaryConditionalOperatorClass:
+    case Stmt::TypeTraitExprClass:
+    case Stmt::CoawaitExprClass:
+    case Stmt::DependentCoawaitExprClass:
+    case Stmt::CoyieldExprClass:
+    case Stmt::CXXBindTemporaryExprClass:
+    case Stmt::CXXDefaultArgExprClass:
+    case Stmt::CXXDefaultInitExprClass:
+    case Stmt::CXXFoldExprClass:
+    case Stmt::CXXRewrittenBinaryOperatorClass:
+    case Stmt::CXXStdInitializerListExprClass:
+    case Stmt::CXXScalarValueInitExprClass:
+    case Stmt::CXXUuidofExprClass:
+    case Stmt::ChooseExprClass:
+    case Stmt::DesignatedInitExprClass:
+    case Stmt::DesignatedInitUpdateExprClass:
+    case Stmt::ArrayInitLoopExprClass:
+    case Stmt::ArrayInitIndexExprClass:
+    case Stmt::ExprWithCleanupsClass:
+    case Stmt::ExpressionTraitExprClass:
+    case Stmt::ExtVectorElementExprClass:
+    case Stmt::ImplicitCastExprClass:
+    case Stmt::ImplicitValueInitExprClass:
+    case Stmt::NoInitExprClass:
+    case Stmt::MaterializeTemporaryExprClass:
+    case Stmt::ObjCIndirectCopyRestoreExprClass:
+    case Stmt::OffsetOfExprClass:
+    case Stmt::ParenListExprClass:
+    case Stmt::PredefinedExprClass:
+    case Stmt::ShuffleVectorExprClass:
+    case Stmt::SourceLocExprClass:
+    case Stmt::ConvertVectorExprClass:
+    case Stmt::VAArgExprClass:
+    case Stmt::ObjCArrayLiteralClass:
+    case Stmt::ObjCDictionaryLiteralClass:
+    case Stmt::ObjCBoxedExprClass:
+    case Stmt::ObjCSubscriptRefExprClass:
+    case Stmt::RecoveryExprClass:
+    case Stmt::SYCLUniqueStableNameExprClass:
+    case Stmt::EmbedExprClass:
+    case Stmt::HLSLOutArgExprClass:
+    case Stmt::OpenACCAsteriskSizeExprClass:
+        K = CXCursor_UnexposedExpr;
+        break;
+#endif
+
     case Stmt::OpaqueValueExprClass:
-        if (Expr* Src = cast<OpaqueValueExpr>(S)->getSourceExpr()) {
+        if (Expr* Src = cast<OpaqueValueExpr>(S)->getSourceExpr())
             return dex_MakeCXCursor(Src, Parent, TU, RegionOfInterest);
-        }
         K = CXCursor_UnexposedExpr;
         break;
 
@@ -189,9 +244,21 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_UnexposedStmt;
         break;
 
+#if CINDEX_VERSION > 64
+    case Stmt::SYCLKernelCallStmtClass:
+        K = CXCursor_UnexposedStmt;
+        break;
+#endif
+
     case Stmt::IntegerLiteralClass:
         K = CXCursor_IntegerLiteral;
         break;
+
+#if CINDEX_VERSION > 64
+    case Stmt::FixedPointLiteralClass:
+        K = CXCursor_FixedPointLiteral;
+        break;
+#endif
 
     case Stmt::FloatingLiteralClass:
         K = CXCursor_FloatingLiteral;
@@ -208,6 +275,11 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::CharacterLiteralClass:
         K = CXCursor_CharacterLiteral;
         break;
+
+#if CINDEX_VERSION > 64
+    case Stmt::ConstantExprClass:
+        return dex_MakeCXCursor(cast<ConstantExpr>(S)->getSubExpr(), Parent, TU, RegionOfInterest);
+#endif
 
     case Stmt::ParenExprClass:
         K = CXCursor_ParenExpr;
@@ -226,6 +298,25 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::ArraySubscriptExprClass:
         K = CXCursor_ArraySubscriptExpr;
         break;
+
+#if CINDEX_VERSION > 64
+    case Stmt::MatrixSubscriptExprClass:
+        // TODO: add support for MatrixSubscriptExpr.
+        K = CXCursor_UnexposedExpr;
+        break;
+
+    case Stmt::ArraySectionExprClass:
+        K = CXCursor_ArraySectionExpr;
+        break;
+
+    case Stmt::OMPArrayShapingExprClass:
+        K = CXCursor_OMPArrayShapingExpr;
+        break;
+
+    case Stmt::OMPIteratorExprClass:
+        K = CXCursor_OMPIteratorExpr;
+        break;
+#endif
 
     case Stmt::BinaryOperatorClass:
         K = CXCursor_BinaryOperator;
@@ -286,6 +377,12 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::CXXFunctionalCastExprClass:
         K = CXCursor_CXXFunctionalCastExpr;
         break;
+
+#if CINDEX_VERSION > 64
+    case Stmt::CXXAddrspaceCastExprClass:
+        K = CXCursor_CXXAddrspaceCastExpr;
+        break;
+#endif
 
     case Stmt::CXXTypeidExprClass:
         K = CXCursor_CXXTypeidExpr;
@@ -355,6 +452,12 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_SizeOfPackExpr;
         break;
 
+#if CINDEX_VERSION > 64
+    case Stmt::PackIndexingExprClass:
+        K = CXCursor_PackIndexingExpr;
+        break;
+#endif
+
     case Stmt::DeclRefExprClass:
         K = CXCursor_DeclRefExpr;
         break;
@@ -364,7 +467,6 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::SubstNonTypeTemplateParmPackExprClass:
     case Stmt::FunctionParmPackExprClass:
     case Stmt::UnresolvedLookupExprClass:
-    case Stmt::TypoExprClass: // A typo could actually be a DeclRef or a MemberRef
         K = CXCursor_DeclRefExpr;
         break;
 
@@ -372,9 +474,6 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::CXXPseudoDestructorExprClass:
     case Stmt::MemberExprClass:
     case Stmt::MSPropertyRefExprClass:
-    case Stmt::ObjCIsaExprClass:
-    case Stmt::ObjCIvarRefExprClass:
-    case Stmt::ObjCPropertyRefExprClass:
     case Stmt::UnresolvedMemberExprClass:
         K = CXCursor_MemberRefExpr;
         break;
@@ -395,6 +494,299 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_LambdaExpr;
         break;
 
+#if CINDEX_VERSION > 64
+    case Stmt::ConceptSpecializationExprClass:
+        K = CXCursor_ConceptSpecializationExpr;
+        break;
+
+    case Stmt::RequiresExprClass:
+        K = CXCursor_RequiresExpr;
+        break;
+
+    case Stmt::CXXParenListInitExprClass:
+        K = CXCursor_CXXParenListInitExpr;
+        break;
+
+    case Stmt::MSDependentExistsStmtClass:
+        K = CXCursor_UnexposedStmt;
+        break;
+    case Stmt::OMPCanonicalLoopClass:
+        K = CXCursor_OMPCanonicalLoop;
+        break;
+    case Stmt::OMPMetaDirectiveClass:
+        K = CXCursor_OMPMetaDirective;
+        break;
+    case Stmt::OMPParallelDirectiveClass:
+        K = CXCursor_OMPParallelDirective;
+        break;
+    case Stmt::OMPSimdDirectiveClass:
+        K = CXCursor_OMPSimdDirective;
+        break;
+    case Stmt::OMPTileDirectiveClass:
+        K = CXCursor_OMPTileDirective;
+        break;
+    case Stmt::OMPStripeDirectiveClass:
+        K = CXCursor_OMPStripeDirective;
+        break;
+    case Stmt::OMPUnrollDirectiveClass:
+        K = CXCursor_OMPUnrollDirective;
+        break;
+    case Stmt::OMPReverseDirectiveClass:
+        K = CXCursor_OMPReverseDirective;
+        break;
+    case Stmt::OMPInterchangeDirectiveClass:
+        K = CXCursor_OMPInterchangeDirective;
+        break;
+    case Stmt::OMPForDirectiveClass:
+        K = CXCursor_OMPForDirective;
+        break;
+    case Stmt::OMPForSimdDirectiveClass:
+        K = CXCursor_OMPForSimdDirective;
+        break;
+    case Stmt::OMPSectionsDirectiveClass:
+        K = CXCursor_OMPSectionsDirective;
+        break;
+    case Stmt::OMPSectionDirectiveClass:
+        K = CXCursor_OMPSectionDirective;
+        break;
+    case Stmt::OMPScopeDirectiveClass:
+        K = CXCursor_OMPScopeDirective;
+        break;
+    case Stmt::OMPSingleDirectiveClass:
+        K = CXCursor_OMPSingleDirective;
+        break;
+    case Stmt::OMPMasterDirectiveClass:
+        K = CXCursor_OMPMasterDirective;
+        break;
+    case Stmt::OMPCriticalDirectiveClass:
+        K = CXCursor_OMPCriticalDirective;
+        break;
+    case Stmt::OMPParallelForDirectiveClass:
+        K = CXCursor_OMPParallelForDirective;
+        break;
+    case Stmt::OMPParallelForSimdDirectiveClass:
+        K = CXCursor_OMPParallelForSimdDirective;
+        break;
+    case Stmt::OMPParallelMasterDirectiveClass:
+        K = CXCursor_OMPParallelMasterDirective;
+        break;
+    case Stmt::OMPParallelMaskedDirectiveClass:
+        K = CXCursor_OMPParallelMaskedDirective;
+        break;
+    case Stmt::OMPParallelSectionsDirectiveClass:
+        K = CXCursor_OMPParallelSectionsDirective;
+        break;
+    case Stmt::OMPTaskDirectiveClass:
+        K = CXCursor_OMPTaskDirective;
+        break;
+    case Stmt::OMPTaskyieldDirectiveClass:
+        K = CXCursor_OMPTaskyieldDirective;
+        break;
+    case Stmt::OMPBarrierDirectiveClass:
+        K = CXCursor_OMPBarrierDirective;
+        break;
+    case Stmt::OMPTaskwaitDirectiveClass:
+        K = CXCursor_OMPTaskwaitDirective;
+        break;
+    case Stmt::OMPErrorDirectiveClass:
+        K = CXCursor_OMPErrorDirective;
+        break;
+    case Stmt::OMPTaskgroupDirectiveClass:
+        K = CXCursor_OMPTaskgroupDirective;
+        break;
+    case Stmt::OMPFlushDirectiveClass:
+        K = CXCursor_OMPFlushDirective;
+        break;
+    case Stmt::OMPDepobjDirectiveClass:
+        K = CXCursor_OMPDepobjDirective;
+        break;
+    case Stmt::OMPScanDirectiveClass:
+        K = CXCursor_OMPScanDirective;
+        break;
+    case Stmt::OMPOrderedDirectiveClass:
+        K = CXCursor_OMPOrderedDirective;
+        break;
+    case Stmt::OMPAtomicDirectiveClass:
+        K = CXCursor_OMPAtomicDirective;
+        break;
+    case Stmt::OMPTargetDirectiveClass:
+        K = CXCursor_OMPTargetDirective;
+        break;
+    case Stmt::OMPTargetDataDirectiveClass:
+        K = CXCursor_OMPTargetDataDirective;
+        break;
+    case Stmt::OMPTargetEnterDataDirectiveClass:
+        K = CXCursor_OMPTargetEnterDataDirective;
+        break;
+    case Stmt::OMPTargetExitDataDirectiveClass:
+        K = CXCursor_OMPTargetExitDataDirective;
+        break;
+    case Stmt::OMPTargetParallelDirectiveClass:
+        K = CXCursor_OMPTargetParallelDirective;
+        break;
+    case Stmt::OMPTargetParallelForDirectiveClass:
+        K = CXCursor_OMPTargetParallelForDirective;
+        break;
+    case Stmt::OMPTargetUpdateDirectiveClass:
+        K = CXCursor_OMPTargetUpdateDirective;
+        break;
+    case Stmt::OMPTeamsDirectiveClass:
+        K = CXCursor_OMPTeamsDirective;
+        break;
+    case Stmt::OMPCancellationPointDirectiveClass:
+        K = CXCursor_OMPCancellationPointDirective;
+        break;
+    case Stmt::OMPCancelDirectiveClass:
+        K = CXCursor_OMPCancelDirective;
+        break;
+    case Stmt::OMPTaskLoopDirectiveClass:
+        K = CXCursor_OMPTaskLoopDirective;
+        break;
+    case Stmt::OMPTaskLoopSimdDirectiveClass:
+        K = CXCursor_OMPTaskLoopSimdDirective;
+        break;
+    case Stmt::OMPMasterTaskLoopDirectiveClass:
+        K = CXCursor_OMPMasterTaskLoopDirective;
+        break;
+    case Stmt::OMPMaskedTaskLoopDirectiveClass:
+        K = CXCursor_OMPMaskedTaskLoopDirective;
+        break;
+    case Stmt::OMPMasterTaskLoopSimdDirectiveClass:
+        K = CXCursor_OMPMasterTaskLoopSimdDirective;
+        break;
+    case Stmt::OMPMaskedTaskLoopSimdDirectiveClass:
+        K = CXCursor_OMPMaskedTaskLoopSimdDirective;
+        break;
+    case Stmt::OMPParallelMasterTaskLoopDirectiveClass:
+        K = CXCursor_OMPParallelMasterTaskLoopDirective;
+        break;
+    case Stmt::OMPParallelMaskedTaskLoopDirectiveClass:
+        K = CXCursor_OMPParallelMaskedTaskLoopDirective;
+        break;
+    case Stmt::OMPParallelMasterTaskLoopSimdDirectiveClass:
+        K = CXCursor_OMPParallelMasterTaskLoopSimdDirective;
+        break;
+    case Stmt::OMPParallelMaskedTaskLoopSimdDirectiveClass:
+        K = CXCursor_OMPParallelMaskedTaskLoopSimdDirective;
+        break;
+    case Stmt::OMPDistributeDirectiveClass:
+        K = CXCursor_OMPDistributeDirective;
+        break;
+    case Stmt::OMPDistributeParallelForDirectiveClass:
+        K = CXCursor_OMPDistributeParallelForDirective;
+        break;
+    case Stmt::OMPDistributeParallelForSimdDirectiveClass:
+        K = CXCursor_OMPDistributeParallelForSimdDirective;
+        break;
+    case Stmt::OMPDistributeSimdDirectiveClass:
+        K = CXCursor_OMPDistributeSimdDirective;
+        break;
+    case Stmt::OMPTargetParallelForSimdDirectiveClass:
+        K = CXCursor_OMPTargetParallelForSimdDirective;
+        break;
+    case Stmt::OMPTargetSimdDirectiveClass:
+        K = CXCursor_OMPTargetSimdDirective;
+        break;
+    case Stmt::OMPTeamsDistributeDirectiveClass:
+        K = CXCursor_OMPTeamsDistributeDirective;
+        break;
+    case Stmt::OMPTeamsDistributeSimdDirectiveClass:
+        K = CXCursor_OMPTeamsDistributeSimdDirective;
+        break;
+    case Stmt::OMPTeamsDistributeParallelForSimdDirectiveClass:
+        K = CXCursor_OMPTeamsDistributeParallelForSimdDirective;
+        break;
+    case Stmt::OMPTeamsDistributeParallelForDirectiveClass:
+        K = CXCursor_OMPTeamsDistributeParallelForDirective;
+        break;
+    case Stmt::OMPTargetTeamsDirectiveClass:
+        K = CXCursor_OMPTargetTeamsDirective;
+        break;
+    case Stmt::OMPTargetTeamsDistributeDirectiveClass:
+        K = CXCursor_OMPTargetTeamsDistributeDirective;
+        break;
+    case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
+        K = CXCursor_OMPTargetTeamsDistributeParallelForDirective;
+        break;
+    case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
+        K = CXCursor_OMPTargetTeamsDistributeParallelForSimdDirective;
+        break;
+    case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
+        K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
+        break;
+    case Stmt::OMPInteropDirectiveClass:
+        K = CXCursor_OMPInteropDirective;
+        break;
+    case Stmt::OMPDispatchDirectiveClass:
+        K = CXCursor_OMPDispatchDirective;
+        break;
+    case Stmt::OMPMaskedDirectiveClass:
+        K = CXCursor_OMPMaskedDirective;
+        break;
+    case Stmt::OMPGenericLoopDirectiveClass:
+        K = CXCursor_OMPGenericLoopDirective;
+        break;
+    case Stmt::OMPTeamsGenericLoopDirectiveClass:
+        K = CXCursor_OMPTeamsGenericLoopDirective;
+        break;
+    case Stmt::OMPTargetTeamsGenericLoopDirectiveClass:
+        K = CXCursor_OMPTargetTeamsGenericLoopDirective;
+        break;
+    case Stmt::OMPParallelGenericLoopDirectiveClass:
+        K = CXCursor_OMPParallelGenericLoopDirective;
+        break;
+    case Stmt::OpenACCComputeConstructClass:
+        K = CXCursor_OpenACCComputeConstruct;
+        break;
+    case Stmt::OpenACCLoopConstructClass:
+        K = CXCursor_OpenACCLoopConstruct;
+        break;
+    case Stmt::OpenACCCombinedConstructClass:
+        K = CXCursor_OpenACCCombinedConstruct;
+        break;
+    case Stmt::OpenACCDataConstructClass:
+        K = CXCursor_OpenACCDataConstruct;
+        break;
+    case Stmt::OpenACCEnterDataConstructClass:
+        K = CXCursor_OpenACCEnterDataConstruct;
+        break;
+    case Stmt::OpenACCExitDataConstructClass:
+        K = CXCursor_OpenACCExitDataConstruct;
+        break;
+    case Stmt::OpenACCHostDataConstructClass:
+        K = CXCursor_OpenACCHostDataConstruct;
+        break;
+    case Stmt::OpenACCWaitConstructClass:
+        K = CXCursor_OpenACCWaitConstruct;
+        break;
+    case Stmt::OpenACCCacheConstructClass:
+        K = CXCursor_OpenACCCacheConstruct;
+        break;
+    case Stmt::OpenACCInitConstructClass:
+        K = CXCursor_OpenACCInitConstruct;
+        break;
+    case Stmt::OpenACCShutdownConstructClass:
+        K = CXCursor_OpenACCShutdownConstruct;
+        break;
+    case Stmt::OpenACCSetConstructClass:
+        K = CXCursor_OpenACCSetConstruct;
+        break;
+    case Stmt::OpenACCUpdateConstructClass:
+        K = CXCursor_OpenACCUpdateConstruct;
+        break;
+    case Stmt::OpenACCAtomicConstructClass:
+        K = CXCursor_OpenACCAtomicConstruct;
+        break;
+    case Stmt::OMPTargetParallelGenericLoopDirectiveClass:
+        K = CXCursor_OMPTargetParallelGenericLoopDirective;
+        break;
+    case Stmt::BuiltinBitCastExprClass:
+        K = CXCursor_BuiltinBitCastExpr;
+        break;
+    case Stmt::OMPAssumeDirectiveClass:
+        K = CXCursor_OMPAssumeDirective;
+        break;
+#endif
     default:
         K = CXCursor_UnexposedExpr;
     }
