@@ -5,14 +5,12 @@ copyright "Copyright © 2019, Joakim Brännström"
 license "BSL-1.0"
 
 targetPath "build"
-
-lflags "-L/usr/lib/llvm-15/lib"
-libs  ":libclang.so.1"
-
-# have to manually adjust the path to the specific libclang source that is used
-
 targetType "executable"
 
-importPaths "../../libclang/16/source" "../source"
-sourcePaths "source" "../../libclang/16/source"
+# manually adjust the path to the specific libclang source that is used
+lflags "-L/usr/lib/llvm-20/lib"
+libs  ":libclang.so"
+dflags "-P-I/usr/lib/llvm-20/include"
+importPaths "../../libclang/source" "../source" "../../../build/llvm"
+
 sourceFiles "../source/libclang_ast/ast/nodes.d"

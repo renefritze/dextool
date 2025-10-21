@@ -10,8 +10,7 @@ one at http://mozilla.org/MPL/2.0/.
 module libclang_ast.ast.nodes;
 
 import clang.c.Index : CINDEX_VERSION_MINOR;
-
-enum Lllvm16Plus = 63;
+import llvm_version;
 
 string makeNodeClassName(string s) {
     import std.string;
@@ -36,7 +35,7 @@ immutable string[] ExtraSeq2 = [
     "OverloadCandidate",
 ];
 // dfmt on
-static if (CINDEX_VERSION_MINOR >= Lllvm16Plus) {
+static if (llvmVersion >= 16) {
     immutable string[] ExtraSeq = ExtraSeq1 ~ ExtraSeq2;
 } else {
     alias ExtraSeq = ExtraSeq1;
@@ -64,7 +63,7 @@ immutable AttributeSeq2 = [
 ];
 // dfmt on
 
-static if (CINDEX_VERSION_MINOR >= Lllvm16Plus) {
+static if (llvmVersion >= 16) {
     immutable string[] AttributeSeq = AttributeSeq1 ~ AttributeSeq2;
 } else {
     alias AttributeSeq = AttributeSeq1;
@@ -151,9 +150,22 @@ immutable string[] ExpressionSeq2 = [
     "RequiresExpr",
     "CXXParenListInitExpr",
 ];
+immutable string[] ExpressionSeq3 = [
+    "ConstantExpr",
+    "ArraySectionExpr",
+    "CXXAddrspaceCastExpr",
+    "PackIndexingExpr",
+    "ConceptSpecializationExpr",
+    "RequiresExpr",
+    "CXXParenListInitExpr",
+    "UnexposedStmt",
+    "BuiltinBitCastExpr",
+];
 // dfmt on
 
-static if (CINDEX_VERSION_MINOR >= Lllvm16Plus) {
+static if (llvmVersion >= 21) {
+    immutable string[] ExpressionSeq = ExpressionSeq1 ~ ExpressionSeq2 ~ ExpressionSeq3;
+} else static if (llvmVersion >= 16) {
     immutable string[] ExpressionSeq = ExpressionSeq1 ~ ExpressionSeq2;
 } else {
     immutable string[] ExpressionSeq = ExpressionSeq1;
@@ -218,7 +230,7 @@ immutable string[] StatementSeq2 = [
     "BuiltinBitCastExpr",
     ];
 // dfmt on
-static if (CINDEX_VERSION_MINOR >= Lllvm16Plus) {
+static if (llvmVersion >= 16) {
     immutable string[] StatementSeq = StatementSeq1 ~ StatementSeq2;
 } else {
     alias StatementSeq = StatementSeq1;

@@ -25,6 +25,8 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 
+#include "llvm_version.h"
+
 namespace clang {
 namespace cxcursor {
 // See: CXCursor.cpp
@@ -154,8 +156,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_SEHLeaveStmt;
         break;
 
-        // both llvm-20, 21 and 22 have this variable set to 64.
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::CoroutineBodyStmtClass:
     case Stmt::CoreturnStmtClass:
         K = CXCursor_UnexposedStmt;
@@ -244,7 +245,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_UnexposedStmt;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::SYCLKernelCallStmtClass:
         K = CXCursor_UnexposedStmt;
         break;
@@ -254,7 +255,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_IntegerLiteral;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::FixedPointLiteralClass:
         K = CXCursor_FixedPointLiteral;
         break;
@@ -276,7 +277,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_CharacterLiteral;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::ConstantExprClass:
         return dex_MakeCXCursor(cast<ConstantExpr>(S)->getSubExpr(), Parent, TU, RegionOfInterest);
 #endif
@@ -299,7 +300,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_ArraySubscriptExpr;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::MatrixSubscriptExprClass:
         // TODO: add support for MatrixSubscriptExpr.
         K = CXCursor_UnexposedExpr;
@@ -378,7 +379,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_CXXFunctionalCastExpr;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::CXXAddrspaceCastExprClass:
         K = CXCursor_CXXAddrspaceCastExpr;
         break;
@@ -452,7 +453,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_SizeOfPackExpr;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::PackIndexingExprClass:
         K = CXCursor_PackIndexingExpr;
         break;
@@ -494,7 +495,7 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
         K = CXCursor_LambdaExpr;
         break;
 
-#if CINDEX_VERSION > 64
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::ConceptSpecializationExprClass:
         K = CXCursor_ConceptSpecializationExpr;
         break;
@@ -525,9 +526,13 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::OMPTileDirectiveClass:
         K = CXCursor_OMPTileDirective;
         break;
+#endif
+#if LLVM_MAJOR_VERSION > 20
     case Stmt::OMPStripeDirectiveClass:
         K = CXCursor_OMPStripeDirective;
         break;
+#endif
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::OMPUnrollDirectiveClass:
         K = CXCursor_OMPUnrollDirective;
         break;
@@ -759,6 +764,8 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::OpenACCWaitConstructClass:
         K = CXCursor_OpenACCWaitConstruct;
         break;
+#endif
+#if LLVM_MAJOR_VERSION > 20
     case Stmt::OpenACCCacheConstructClass:
         K = CXCursor_OpenACCCacheConstruct;
         break;
@@ -777,6 +784,8 @@ CXCursor dex_MakeCXCursor(const clang::Stmt* S, const clang::Decl* Parent, CXTra
     case Stmt::OpenACCAtomicConstructClass:
         K = CXCursor_OpenACCAtomicConstruct;
         break;
+#endif
+#if LLVM_MAJOR_VERSION > 19
     case Stmt::OMPTargetParallelGenericLoopDirectiveClass:
         K = CXCursor_OMPTargetParallelGenericLoopDirective;
         break;

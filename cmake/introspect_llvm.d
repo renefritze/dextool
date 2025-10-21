@@ -101,28 +101,7 @@ string llvmVersion() {
 }
 
 string llvmMajorVersion() {
-    auto llvm = llvmCmd();
-
-    immutable defaultVersion = 8;
-    int[int] versionToBinding;
-    // known to work but missing specific bindings
-    versionToBinding[4] = defaultVersion;
-    versionToBinding[5] = defaultVersion;
-    versionToBinding[6] = defaultVersion;
-    versionToBinding[7] = defaultVersion;
-    // all tests where green using bindings for 13
-    versionToBinding[14] = 13;
-
-    foreach (d; dirEntries("libs/libclang", SpanMode.shallow)) {
-        try {
-            const version_ = d.baseName.to!int;
-            versionToBinding[version_] = version_;
-        } catch (Exception e) {
-        }
-    }
-
-    // if no matching is found assume latest supported
-    return versionToBinding.get(llvm.v.major, versionToBinding.byKey.array.maxElement).to!string;
+    return llvmCmd.v.major.to!string;
 }
 
 string llvmCppFlags() {
