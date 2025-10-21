@@ -43,11 +43,6 @@ execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR}  ldflags
     RESULT_VARIABLE llvm_config_LDFLAGS_status
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR} version
-    OUTPUT_VARIABLE llvm_config_VERSION
-    RESULT_VARIABLE llvm_config_VERSION_status
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR} major_version
     OUTPUT_VARIABLE llvm_config_MAJOR_VERSION
     RESULT_VARIABLE llvm_config_MAJOR_VERSION_status
@@ -83,7 +78,6 @@ execute_process(COMMAND ${LLVM_CMD} ${CMAKE_SOURCE_DIR} includedir
     RESULT_VARIABLE clang_config_INCLUDEDIR_status
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-message(STATUS "llvm-config VERSION: ${llvm_config_VERSION}")
 message(STATUS "llvm-config MAJOR_VERSION: ${llvm_config_MAJOR_VERSION}")
 message(STATUS "llvm-config LIBDIR: ${llvm_config_LIBDIR}")
 message(STATUS "llvm-config LDFLAGS: ${llvm_config_LDFLAGS}")
@@ -123,11 +117,9 @@ endif()
 # LLVM =======================================================================
 
 function(try_llvm_config_find)
-    if (llvm_config_LDFLAGS_status OR llvm_config_LIBS_status OR llvm_config_VERSION_status OR llvm_config_INCLUDE_status OR llvm_config_LIBDIR_status)
+    if (llvm_config_LDFLAGS_status OR llvm_config_LIBS_status OR llvm_config_MAJOR_VERSION_status OR llvm_config_INCLUDE_status OR llvm_config_LIBDIR_status)
         return()
     endif()
-
-    set(LIBLLVM_VERSION "${llvm_config_VERSION}" CACHE STRING "libLLVM version")
 
     set(LIBLLVM_MAJOR_VERSION "${llvm_config_MAJOR_VERSION}" CACHE STRING "libLLVM major version")
 
@@ -138,6 +130,8 @@ function(try_llvm_config_find)
     set(LIBLLVM_CXX_FLAGS "${llvm_config_CPPFLAGS} ${LIBLLVM_CXX_EXTRA_FLAGS}" CACHE STRING "Compiler flags for C++ using LLVM")
 
     set(LIBLLVM_CONFIG_DONE YES CACHE BOOL "LLVM Configuration status" FORCE)
+
+    set(LIBLLVM_LIBCLANG_INC "${clang_config_INCLUDEDIR}" CACHE STRING "Path to where libclang-c headerss such as Index.h is")
 endfunction()
 
 function(try_llvm_from_user_config)
@@ -155,10 +149,16 @@ if (NOT LIBLLVM_CONFIG_DONE)
     try_llvm_config_find()
 endif()
 
+# Create the file used in D code
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/llvm)
+file(WRITE ${CMAKE_BINARY_DIR}/llvm/llvm_version.d "module llvm_version; immutable int llvmVersion = ${LIBLLVM_MAJOR_VERSION};")
+file(WRITE ${CMAKE_BINARY_DIR}/llvm/llvm_version.h "#pragma once\n#define LLVM_MAJOR_VERSION ${LIBLLVM_MAJOR_VERSION}")
+
+set(LIBLLVM_MAJOR_VERSION_INC ${CMAKE_BINARY_DIR}/llvm)
+
 # Fixup
 # Simplify to only support x86
 set(LIBLLVM_TARGET "LLVM_Target_X86")
-set(LIBLLVM_FLAGS "-version=${LIBLLVM_VERSION} -version=${LIBLLVM_TARGET}" CACHE STRING "D version flags for libLLVM")
 
 message(STATUS "libclang config status : ${LIBCLANG_CONFIG_DONE}")
 message(STATUS "libclang libs: ${LIBCLANG_LIBS}")

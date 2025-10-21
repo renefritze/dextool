@@ -154,14 +154,13 @@ llvm/clang you do it with these flags:
 
 The following variables are defined:
 * LIBCLANG_LDFLAGS          - flags to use when linking with libclang
-* LIBLLVM_VERSION           - libLLVM full version (e.g. 8_0_1)
 * LIBLLVM_MAJOR_VERSION     - libLLVM major version (e.g. 8)
 * LIBLLVM_LDFLAGS           - flags to use when linking with libllvm
 * LIBLLVM_CXX_FLAGS         - the required flags to build C++ code using LLVM
 * LIBLLVM_CXX_EXTRA_FLAGS   - extra flags to use when build C++ code using LLVM
 * LIBLLVM_FLAGS             - the required flags by llvm-d such as version
 * LIBLLVM_LIBS              - the required libraries for linking LLVM
-* LIBCLANG_INC              - the libclang-c headers such as Index.h
+* LIBLLVM_LIBCLANG_INC      - the libclang-c headers such as `clang-c/Index.h`
 
 Lets say you have version `8.0.1` of LLVM installed but llvm-config returns
 `0.0.0`. `introspect_llvm.d` will in this case fail to detect the version of
@@ -171,8 +170,7 @@ To tell cmake what version it is you can do the following:
 
 ```sh
 # llvm-config --version
-cmake -DLIBLLVM_VERSION="LLVM_8_0_1" \
--DLIBLLVM_MAJOR_VERSION="8"
+cmake -DLIBLLVM_MAJOR_VERSION="8"
 ```
 
 If you also need to provide the includes and libs you would need to add the
@@ -193,7 +191,7 @@ is in `$PATH`.
 # all those that are prefixed with libLLVM.
 -DLIBLLVM_LIBS="-lLLVMXRay -lLLVMTextApi /*and maaaany more or just one depending on how you have installed LLVM*/"
 # where the libclang-c headers are located
--DLIBCLANG_INC=""
+-DLLVM_LIBCLANG_INC="/usr/lib/llvm-20/include"
 ```
 
 #### SQLite link or missing
