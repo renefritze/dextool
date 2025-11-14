@@ -112,7 +112,7 @@ struct DataAccess {
             .addCompiler(compiler.useCompilerSystemIncludes)
             .replaceCompiler(compiler.useCompilerSystemIncludes)
             .addSystemIncludes
-            .prependFlags(compiler.extraFlags)
+            .prependFlags(compiler.allCompilerFlags)
             .array);
         // dfmt on
     }

@@ -134,7 +134,14 @@ struct ConfigCompiler {
     import dextool.compilation_db : SystemCompiler = Compiler;
 
     /// Additional flags the user wants to add besides those that are in the compile_commands.json.
+    string[] flags;
+
+    /// Additional flags the user wants to add besides those that are in the compile_commands.json.
     string[] extraFlags;
+
+    string[] allCompilerFlags() {
+        return flags ~ extraFlags;
+    }
 
     /// True requires system includes to be passed on to the compiler via -I
     bool forceSystemIncludes;

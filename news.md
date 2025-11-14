@@ -12,6 +12,9 @@ Fixes
    It is now more aggressive and will restart continuously until it has failed
    ten times.
  * Support llvm-21
+ * Mutate plugin supports a system wide configuration. This should reduce the
+   duplication of certain parameters in the individual configuration files and
+   make it easier to maintain the configs.
 
 # v5.3 Chert
 

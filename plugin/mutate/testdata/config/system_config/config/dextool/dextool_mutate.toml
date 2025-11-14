@@ -1,0 +1,3 @@
+[compiler]
+flags = ["system_flags"]
+extra_flags = ["system_flags_extra"]

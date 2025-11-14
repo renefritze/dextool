@@ -34,6 +34,15 @@ This options are general and can be used for all the commands in Mutate.
 Load configuration (default: .dextool_mutate.toml). Can be used if another
 project contains a configuration-file which the users wants to reuse.
 
+Dextool always first load the system config and then the user config (-c). The
+user configuration can override anything in the system config.
+
+Dextool look for the system config at:
+
+- `$XDG_CONFIG_HOME/dextool/dextool_mutate.toml`
+- `dirname(<dextool executable>)/config/dextool_mutate.toml`
+- `dirname(<dextool executable>)/../config/dextool_mutate.toml`
+- `$XDG_CONFIG_DIRS/config/dextool/dextool_mutate.toml`
 
 ```sh
 --db

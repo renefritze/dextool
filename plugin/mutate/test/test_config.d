@@ -86,6 +86,33 @@ unittest {
     ]).shouldBeIn(r.output);
 }
 
+@(testId ~ "shall combine system and user configuration")
+unittest {
+    import std.file : mkdirRecurse;
+    import std.path : buildPath;
+
+    mixin(EnvSetup(globalTestdir));
+
+    string[string] env;
+    env["XDG_CONFIG_HOME"] = testEnv.outdir ~ "config";
+
+    mkdirRecurse(testEnv.outdir ~ "config/dextool");
+    dirContentCopy(buildPath(testData.toString, "config/system_config"), testEnv.outdir.toString);
+    dirContentCopy(buildPath(testData.toString,
+            "config/system_config/config/dextool"), testEnv.outdir ~ "config/dextool");
+
+    auto r = makeDextoolAnalyze(testEnv).setEnv(env).addArg([
+        "-c", (testEnv.outdir ~ ".dextool_mutate.toml").toString
+    ]).addArg([
+        "--compile-db", (testEnv.outdir ~ "compile_commands.json").toString
+    ]).run;
+
+    testConsecutiveSparseOrder!Re([
+        "trace: Reading system conf.*", "trace: Reading user conf.*",
+        "trace: Compiler flags: system_flags local_flags_extra.*"
+    ]).shouldBeIn(r.output);
+}
+
 // shall extend test commands with those in the specified directory when testing
 class ExtendTestCommandsFromTestCmdDir : SimpleFixture {
     override void test() {

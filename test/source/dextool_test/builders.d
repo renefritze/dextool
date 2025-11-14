@@ -34,6 +34,7 @@ struct BuildDextoolRun {
         string[] args_;
         string[] post_args;
         string[] flags_;
+        string[string] env_;
 
         /// Data to stream into stdin upon execute.
         string stdin_data;
@@ -62,6 +63,11 @@ struct BuildDextoolRun {
 
     Path workdir() {
         return Path(workdir_);
+    }
+
+    auto setEnv(string[string] v) {
+        env_ = v;
+        return this;
     }
 
     auto setWorkdir(T)(T v) {
@@ -166,6 +172,7 @@ struct BuildDextoolRun {
     }
 
     auto run() {
+        static import std.process;
         import proc;
 
         auto cmd = () {
@@ -195,7 +202,7 @@ struct BuildDextoolRun {
 
         auto sw = StopWatch(AutoStart.yes);
         try {
-            auto p = pipeProcess(cmd).sandbox;
+            auto p = pipeProcess(cmd, std.process.Redirect.all, env_).sandbox;
             scope (exit)
                 p.dispose;
             if (!stdin_data.empty) {
