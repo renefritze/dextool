@@ -177,7 +177,6 @@ int rmain(string[] args) nothrow {
     try {
         auto parsed = parseMainCLI(args);
         confLogger(parsed.confLog);
-
         exit_status = runPlugin(parsed, args);
     } catch (Exception ex) {
         logger.trace(ex).collectException;

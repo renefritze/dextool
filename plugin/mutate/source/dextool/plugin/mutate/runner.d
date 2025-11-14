@@ -11,14 +11,14 @@ module dextool.plugin.runner;
 
 shared static this() {
     // the module constructor is placed here to break dependency cycles.
-    import logger = std.experimental.logger;
-    import colorlog;
+    import std.logger : LogLevel;
+    import colorlog : SimpleLogger, make;
 
-    make!SimpleLogger(logger.LogLevel.info, "admin");
-    make!SimpleLogger(logger.LogLevel.info, "analyze");
-    make!SimpleLogger(logger.LogLevel.info, "database");
-    make!SimpleLogger(logger.LogLevel.info, "test");
-    make!SimpleLogger(logger.LogLevel.info, "report");
+    make!SimpleLogger(LogLevel.info, "admin");
+    make!SimpleLogger(LogLevel.info, "analyze");
+    make!SimpleLogger(LogLevel.info, "database");
+    make!SimpleLogger(LogLevel.info, "test");
+    make!SimpleLogger(LogLevel.info, "report");
 }
 
 /**
@@ -27,8 +27,7 @@ shared static this() {
  */
 auto runPlugin(string[] args) @safe {
     import std.stdio : writeln;
-    import std.traits : ReturnType;
-    import logger = std.experimental.logger;
+    import logger = std.logger;
     import dextool.type;
     import dextool.utility;
     import dextool.xml : makeXmlLog;

@@ -13,7 +13,7 @@ configuration of how the mutation plugin should behave.
 module dextool.plugin.mutate.frontend.argparser;
 
 import core.time : dur;
-import logger = std.experimental.logger;
+import logger = std.logger;
 import std.algorithm : joiner, sort, map, filter, max;
 import std.array : empty, array, appender;
 import std.exception : collectException;
@@ -219,7 +219,11 @@ struct ArgParser {
 
         app.put("[compiler]");
         app.put(null);
+        app.put("# flags to pass on to the compiler such as the C++ standard.");
+        app.put("# Set in the system configuration");
+        app.put(format(`# flags = [%(%s, %)]`, compiler.flags));
         app.put("# extra flags to pass on to the compiler such as the C++ standard.");
+        app.put("# Set in the user configuration");
         app.put(format(`# extra_flags = [%(%s, %)]`, compiler.extraFlags));
         app.put(null);
         app.put("# force system includes to use -I instead of -isystem");
@@ -799,7 +803,9 @@ void printFileAnalyzeHelp(ref ArgParser ap) @safe {
  * ---
  */
 void loadConfig(ref ArgParser rval) @trusted {
-    import std.file : exists, readText;
+    import std.file : exists, readText, isFile;
+    import std.range : tee;
+    import my.resource : configSearch;
     import toml;
 
     if (!exists(rval.miniConf.confFile))
@@ -811,20 +817,33 @@ void loadConfig(ref ArgParser rval) @trusted {
         return doc;
     }
 
-    TOMLDocument doc;
+    AbsolutePath systemConfigPath;
     try {
-        doc = tryLoading(rval.miniConf.confFile);
+        logger.trace(configSearch("dextool"));
+        foreach (p; configSearch("dextool").map!(a => a ~ "dextool_mutate.toml")
+                .tee!(a => logger.trace("Looking for system config: ", a))
+                .filter!(a => a.exists && a.isFile)) {
+            logger.trace("Reading system configuration: ", p);
+            systemConfigPath = p;
+            rval = loadConfig(rval, tryLoading(p));
+            break;
+        }
     } catch (Exception e) {
-        logger.warning("Unable to read the configuration from ", rval.miniConf.confFile);
-        logger.warning(e.msg);
-        rval.data.exitStatus = ExitStatusType.Errors;
-        return;
+        logger.info("Unable to read the system configuration from ", systemConfigPath);
+        logger.info(e.msg);
     }
 
-    rval = loadConfig(rval, doc);
+    try {
+        logger.trace("Reading user configuration: ", rval.miniConf.confFile);
+        rval = loadConfig(rval, tryLoading(rval.miniConf.confFile));
+    } catch (Exception e) {
+        logger.warning("Unable to read the local configuration from ", rval.miniConf.confFile);
+        logger.warning(e.msg);
+        rval.data.exitStatus = ExitStatusType.Errors;
+    }
 }
 
-ArgParser loadConfig(ArgParser rval, ref TOMLDocument doc) @trusted {
+ArgParser loadConfig(ArgParser rval, TOMLDocument doc) @trusted {
     import std.conv : to;
     import std.format : format;
     import std.path : dirName, buildPath;
@@ -1043,6 +1062,9 @@ ArgParser loadConfig(ArgParser rval, ref TOMLDocument doc) @trusted {
         c.compileDb.flagFilter.skipCompilerArgs = cast(int) v.integer;
     };
 
+    callbacks["compiler.flags"] = (ref ArgParser c, ref TOMLValue v) {
+        c.compiler.flags = v.array.map!(a => a.str).array;
+    };
     callbacks["compiler.extra_flags"] = (ref ArgParser c, ref TOMLValue v) {
         c.compiler.extraFlags = v.array.map!(a => a.str).array;
     };
@@ -1559,7 +1581,7 @@ MiniConfig cliToMiniConfig(string[] args) @trusted nothrow {
     import std.file : exists;
     static import std.getopt;
 
-    immutable default_conf = ".dextool_mutate.toml";
+    immutable defaultConf = ".dextool_mutate.toml";
 
     MiniConfig conf;
 
@@ -1568,7 +1590,7 @@ MiniConfig cliToMiniConfig(string[] args) @trusted nothrow {
                 "c|config", "none not visible to the user", &conf.rawConfFile,
                 "short-plugin-help", "not visible to the user", &conf.shortPluginHelp);
         if (conf.rawConfFile.length == 0)
-            conf.rawConfFile = default_conf;
+            conf.rawConfFile = defaultConf;
         conf.confFile = Path(conf.rawConfFile).AbsolutePath;
     } catch (Exception e) {
         logger.trace(conf).collectException;
