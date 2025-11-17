@@ -151,15 +151,9 @@ immutable string[] ExpressionSeq2 = [
     "CXXParenListInitExpr",
 ];
 immutable string[] ExpressionSeq3 = [
-    "ConstantExpr",
-    "ArraySectionExpr",
-    "CXXAddrspaceCastExpr",
-    "PackIndexingExpr",
-    "ConceptSpecializationExpr",
-    "RequiresExpr",
-    "CXXParenListInitExpr",
-    "UnexposedStmt",
-    "BuiltinBitCastExpr",
+    // TODO: add back these nodes when the code for them have been generated
+    // "ArraySectionExpr",
+    // "PackIndexingExpr",
 ];
 // dfmt on
 
