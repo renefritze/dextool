@@ -21,7 +21,7 @@ info: Wrote configuration to /home/foo/fmt/.dextool_mutate.toml
 ```
 
 Open the configuration file `.dextool_mutate.toml`. See
-[options](RADME_config.md) for an in depth explanation of them. Change the
+[options](README_config.md) for an in depth explanation of them. Change the
 following configuration parameters to this:
 
 ```toml
