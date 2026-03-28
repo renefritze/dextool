@@ -28,10 +28,10 @@ sudo apt install build-essential cmake llvm-18 llvm-18-dev clang-18 libclang-18-
 **Step 4:** Install the D compiler:
 
 The supported compiler versions are found at:
-   * [dmd minimal version](Docker/partial/dmd_min_version)
-   * [dmd max version](Docker/partial/dmd_latest_version)
-   * [ldc minimal version](Docker/partial/ldc_min_version)
-   * [ldc max version](Docker/partial/ldc_latest_version)
+   * [dmd minimal version](../../Docker/partial/dmd_min_version)
+   * [dmd max version](../../Docker/partial/dmd_latest_version)
+   * [ldc minimal version](../../Docker/partial/ldc_min_version)
+   * [ldc max version](../../Docker/partial/ldc_latest_version)
 
 You can install them via the install script at dlang.org.
 
