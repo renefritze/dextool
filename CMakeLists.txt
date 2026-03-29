@@ -78,6 +78,23 @@ else()
     endif()
 endif()
 
+cmake_host_system_information(RESULT TOTAL_RAM_MIB QUERY TOTAL_PHYSICAL_MEMORY)
+
+if(NOT DEFINED LOW_MEM AND TOTAL_RAM_MIB AND TOTAL_RAM_MIB LESS 16384)
+    if(TOTAL_RAM_MIB LESS 12288)
+        message(WARNING
+            "Detected ${TOTAL_RAM_MIB} MiB RAM (<12 GiB). "
+            "Building dextool may run out of memory when compiling dextool-mutate.o. "
+            "If that happens, rerun CMake with -DLOW_MEM=ON and build single-threaded (-j1).")
+    else()
+        message(STATUS
+            "Detected ${TOTAL_RAM_MIB} MiB RAM (<16 GiB). "
+            "dextool builds most comfortably with ~16 GiB RAM. "
+            "If ldc is killed while compiling dextool-mutate.o, rerun CMake with "
+            "-DLOW_MEM=ON and build single-threaded (-j1).")
+    endif()
+endif()
+
 if(LOW_MEM)
     append("-lowmem" DDMD_DFLAGS)
 endif()
