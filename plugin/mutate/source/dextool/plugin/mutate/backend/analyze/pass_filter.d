@@ -13,7 +13,8 @@ equivalent or unproductive mutants.
 module dextool.plugin.mutate.backend.analyze.pass_filter;
 
 import logger = std.experimental.logger;
-import std.algorithm : among, map, filter, cache;
+import std.algorithm : among, map, filter, cache, all;
+import std.algorithm.mutation : stripRight;
 import std.array : appender, empty;
 import std.typecons : Tuple;
 
@@ -138,5 +139,59 @@ bool isUnproductiveCppPattern(Blob file, Offset o, const(ubyte)[] mutant) {
         return true;
     }
 
+    // replacing zero-valued integer literals with plain '0' is equivalent
+    if (isEquivalentZeroMutant(file.content[o.begin .. o.end], mutant)) {
+        return true;
+    }
+
     return false;
+}
+
+bool isEquivalentZeroMutant(const(ubyte)[] original, const(ubyte)[] mutant) {
+    if (original.length < 2 || mutant != ['0']) {
+        return false;
+    }
+
+    const normalized = stripIgnoredIntegerLiteralChars(original);
+    return !normalized.empty && normalized.all!(c => c == '0');
+}
+
+const(ubyte)[] stripIgnoredIntegerLiteralChars(const(ubyte)[] literal) {
+    import std.algorithm.searching : canFind;
+    import std.array : array;
+
+    static immutable ubyte[13] ignoredChars = ['u', 'U', 'l', 'L', 'v', 'V', 'z', 'Z', 'x',
+        'X', 'b', 'B', '\''];
+
+    return literal.filter!(c => !ignoredChars[].canFind(c)).array;
+}
+
+@("shall treat zero-valued integer literals as equivalent to plain 0")
+@safe unittest {
+    import unit_threaded : shouldBeTrue;
+
+    foreach (literal; [
+        "0u", "0U", "0l", "0L", "0ll", "0LL", "0ul", "0uL", "0Ul", "0UL",
+        "0lu", "0lU", "0Lu", "0LU", "0ull", "0uLL", "0Ull", "0ULL", "0llu",
+        "0llU", "0LLu", "0LLU", "0z", "0Z", "00", "00z", "0uz", "0uZ", "0Uz",
+        "0UZ", "0zu", "0zU", "0Zu", "0ZU", "000", "0x0", "0x0ULL", "0x00",
+        "0x00ULL", "0x0z", "0x0UZ", "0x0'000'000", "0b0", "0B0", "0b0z", "0b00",
+        "0B0000ULL", "0000u", "0x0000u", "0X0000ULL", "0'0'0'0", "0'0z",
+        "0'000'000'000", "0'000'000'000llu"
+    ]) {
+        isEquivalentZeroMutant(cast(const(ubyte)[])literal, ['0']).shouldBeTrue;
+    }
+}
+
+@("shall not treat non-zero integer literals as equivalent to plain 0")
+@safe unittest {
+    import unit_threaded : shouldBeFalse;
+
+    foreach (literal; [
+        "1", "01", "01u", "0001", "0x1", "0x0001ULL", "0X2A", "0b1", "0b0001",
+        "0b101010", "052", "0x2a", "0xFFu", "18'446'744'073'709'550'592llu",
+        "1844'6744'0737'0955'0592uLL", "184467'440737'0'95505'92LLU"
+    ]) {
+        isEquivalentZeroMutant(cast(const(ubyte)[])literal, ['0']).shouldBeFalse;
+    }
 }

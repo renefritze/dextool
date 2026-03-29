@@ -71,6 +71,42 @@ unittest {
     ]).shouldBeIn(r.output);
 }
 
+@(testId ~ "shall drop equivalent zero-valued integer literal mutants when analyzing")
+unittest {
+    import std.algorithm : filter, map;
+    import std.algorithm.sorting : sort;
+    import std.array : array;
+    import std.file : readText;
+    import std.json : parseJSON;
+    mixin(EnvSetup(globalTestdir));
+
+    makeDextoolAnalyze(testEnv)
+        .addInputArg(testData ~ "undesired_zero_literals.cpp")
+        .addArg(["--mutant", "cr"])
+        // For binary literals like 0b0.
+        .addFlag("-std=c++14")
+        .run;
+
+    makeDextoolReport(testEnv, testData.dirName)
+        .addArg(["--style", "json"])
+        .addArg(["--section", "all_mut"])
+        .addArg(["--logdir", testEnv.outdir.toString])
+        .run;
+
+    const fileReports = parseJSON(readText((testEnv.outdir ~ "report.json").toString))["files"].array;
+
+    fileReports.length.shouldEqual(1);
+
+    const expectedCrZeroIntLines = [3L, 4, 5, 6, 7, 8, 9, 10];
+    auto actualCrZeroIntLines = fileReports[0]["mutants"].array
+        .filter!(a => a["kind"].str == "crZeroInt")
+        .map!(a => a["line"].integer)
+        .array
+        .sort;
+
+    actualCrZeroIntLines.shouldEqual(expectedCrZeroIntLines);
+}
+
 @(testId ~ "shall detect changes in dependencies based on #include")
 unittest {
     mixin(EnvSetup(globalTestdir));
