@@ -10,5 +10,4 @@ See https://docs.docker.com/docker-for-mac/osxfs/#namespaces for more info.
 
 # Credit
 
-This docker image is derived from the mull project.
-[mull](hhttps://github.com/mull-project/mull)
+This docker image is derived from the [mull project](https://github.com/mull-project/mull).
