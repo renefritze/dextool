@@ -1,8 +1,37 @@
+# Configuration
+
+This document is a reference for `dextool mutate` commands, flags, and
+`.dextool_mutate.toml` configuration options.
+
+It provides detailed descriptions of all available settings and is intended for
+users who need fine-grained control over mutation testing behavior.
+
+For a step-by-step introduction, see [the quick start guide](README_tutorial.md).
+
+- [Command Line Options](#command-line-options)
+  - [General](#general)
+  - [Admin](#admin)
+  - [Analyze](#cmd-analyze)
+  - [Generate](#generate)
+  - [Report](#cmd-report)
+  - [Test](#test)
+- [Configuration File](#configuration-file)
+  - [\[workarea\]](#workarea)
+  - [\[generic\]](#generic)
+  - [\[analyze\]](#config-analyze)
+  - [\[schema\]](#schema)
+  - [\[coverage\]](#coverage)
+  - [\[database\]](#database)
+  - [\[compiler\]](#compiler)
+  - [\[compile\_commands\]](#compile_commands)
+  - [\[mutant\_test\]](#mutant_test)
+  - [\[report\]](#config-report)
+- [Resources](#resources)
+
 # Command Line Options
 
-This document aims to improve usability for the *Mutate* plugin in Dextool by
-explaining flags and options in more detail. The following sections are divided
-into the current existing commands for *Mutate*.
+The following sections are divided into the current existing commands for
+*Mutate*.
 
 The flags for the different commands will be listed in the following format:
 
@@ -63,10 +92,6 @@ Path used as the root for mutation/reporting of files (default: .).
 Display the help information in terminal window (less detailed). By writing,
 for example, *dextool mutate analyze --help*, the user will display the help
 for the analyze command.
-
-### Common
-
-These are options that occur in multiple command groups.
 
 ```sh
 --include
@@ -215,7 +240,7 @@ Provide a rationale for marking a mutant.
 The mutation operators are internally divided in 40+ sub categories. This
 specify which of them to affect.
 
-## Analyze
+## Analyze <a id="cmd-analyze"></a>
 
 Analyze-mode for the plugin. Is used to find mutation points in the project by
 traversing the AST for the eligible files. Will write results into a database
@@ -332,7 +357,7 @@ Generate-mode for the plugin.
 ```
 Mutate the source code as mutant ID
 
-## Report <a name="report"></a>
+## Report <a id="cmd-report"></a>
 
 Report-mode for the plugin. Is used to generate a result-report at any given
 moment (before, after or during mutation testing execution). Can also be used
@@ -650,7 +675,7 @@ Generic options that affect all phases that. The most important to configure
 here is the mutation operators to use (`mutants`). It affects what mutants are
 saved in the database, which ones are mutated and reported.
 
-## [analyze]
+## [analyze] <a id="config-analyze"></a>
 
 Options that affects the analyze phase.
 
@@ -863,7 +888,7 @@ terminated `test_cmd` is marked as timeout. This is to re-test them later on to
 be **really** sure that they actually result in the host running out of memory
 and thus isn't a fluke.
 
-## [report]
+## [report] <a id="config-report"></a>
 
 Configuration of the generated reports.
 
