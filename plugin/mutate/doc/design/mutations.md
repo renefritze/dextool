@@ -113,11 +113,11 @@ of an operator are of boolean type.
 
 [partof](#design-mutation_ror)
 
-The goal is to reduce the number of *undesired* mutants.
+The goal is to reduce the number of *unproductive* mutants.
 
 Strict equal is not recommended to ever use for floating point numbers. Because
 of this the test suite is probably not designed to catch these type of
-mutations which lead to *undesired* mutants. They are *techincally* not
+mutations which lead to *unproductive* mutants. They are *techincally* not
 equivalent but they aren't supposed to be cought because the SUT is never
 supposed to do these type of operations.
 
@@ -140,7 +140,7 @@ if they are, and it is a valid use, the original schema should work.
 
 TODO investigate Mutant 3. What should it be?
 
-TODO empirical evidence needed to demonstrate how much the undesired mutations
+TODO empirical evidence needed to demonstrate how much the unproductive mutations
 are reduced.
 
 ### ROR for Enumerations {id="design-mutation_ror_enum"}
@@ -193,7 +193,7 @@ mutants for the third line should be `true` and `false`.
 
 [partof](#design-mutation_ror)
 
-The goal is to reduce the number of undesired mutants when the user of the
+The goal is to reduce the number of unproductive mutants when the user of the
 plugin has knowledge about the internal design of the program.
 
 Design knowledge: Do the program use such C++ constructs that guarantee memory
@@ -355,12 +355,12 @@ a = -abs(b + c)
 a = fail_on_zero(b + c)
 ```
 
-### Undesired Mutant
+### Unproductive Mutant
 
 Based on empirical observations integer literals are not mutated because they usually result in equivalent mutants.
 Further studies on this subject is needed.
 
-> The mutation abs(0) and abs(0.0) is undesired because it has no semantic effect.
+> The mutation abs(0) and abs(0.0) is equivalent because it has no semantic effect.
 > Note though that abs(-0.0) is a separate case.
 
 ### Note

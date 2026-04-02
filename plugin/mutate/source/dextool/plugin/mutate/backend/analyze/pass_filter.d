@@ -8,7 +8,7 @@ v.2.0. If a copy of the MPL was not distributed with this file, You can obtain
 one at http://mozilla.org/MPL/2.0/.
 
 Filter mutants based on simple textual pattern matching. These are the obvious
-equivalent or undesired mutants.
+equivalent or unproductive mutants.
 */
 module dextool.plugin.mutate.backend.analyze.pass_filter;
 
@@ -39,7 +39,7 @@ MutantsResult filterMutants(FilesysIO fio, MutantsResult mutants) {
         log.trace(f);
         auto file = fio.makeInput(f);
         foreach (r; mutants.getMutationPoints(f)
-                .map!(a => analyzeForUndesiredMutant(file, a, mutants.lang))
+                .map!(a => analyzeForUnproductiveMutant(file, a, mutants.lang))
                 .cache
                 .filter!(a => !a.kind.empty)) {
             foreach (k; r.kind) {
@@ -56,12 +56,12 @@ private:
 alias Mutants = Tuple!(Mutation.Kind[], "kind", MutantsResult.MutationPoint, "point");
 
 /// Returns: mutants to drop from the mutation point.
-Mutants analyzeForUndesiredMutant(Blob file, Mutants mutants, const Language lang) {
+Mutants analyzeForUnproductiveMutant(Blob file, Mutants mutants, const Language lang) {
     auto app = appender!(Mutation.Kind[])();
 
     foreach (k; mutants.kind) {
         if (isEmpty(file, mutants.point.offset)) {
-            log.tracef("Dropping undesired mutant. Mutant is empty (%s %s %s)",
+            log.tracef("Dropping unproductive mutant. Mutant is empty (%s %s %s)",
                     file.uri, mutants.point, k);
             app.put(k);
             continue;
@@ -69,16 +69,16 @@ Mutants analyzeForUndesiredMutant(Blob file, Mutants mutants, const Language lan
 
         auto mutant = makeMutationText(file, mutants.point.offset, k, lang);
         if (isTextuallyEqual(file, mutants.point.offset, mutant.rawMutation)) {
-            log.tracef("Dropping undesired mutant. Original and mutant is textually equivalent (%s %s %s)",
+            log.tracef("Dropping equivalent mutant. Original and mutant is textually equivalent (%s %s %s)",
                     file.uri, mutants.point, k);
             app.put(k);
         } else if (lang.among(Language.assumeCpp, Language.cpp)
-                && isUndesiredCppPattern(file, mutants.point.offset, mutant.rawMutation)) {
-            log.tracef("Dropping undesired mutant. The mutant is an undesired C++ mutant pattern (%s %s %s)",
+                && isUnproductiveCppPattern(file, mutants.point.offset, mutant.rawMutation)) {
+            log.tracef("Dropping unproductive mutant. The mutant is an unproductive C++ mutant pattern (%s %s %s)",
                     file.uri, mutants.point, k);
             app.put(k);
         } else if (isOnlyWhitespace(file, mutants.point.offset, mutant.rawMutation)) {
-            log.tracef("Dropping undesired mutant. Both the original and the mutant is only whitespaces (%s %s %s)",
+            log.tracef("Dropping equivalent mutant. Both the original and the mutant is only whitespaces (%s %s %s)",
                     file.uri, mutants.point, k);
             app.put(k);
         }
@@ -117,7 +117,7 @@ bool isOnlyWhitespace(Blob file, Offset o, const(ubyte)[] mutant) {
     return rval;
 }
 
-bool isUndesiredCppPattern(Blob file, Offset o, const(ubyte)[] mutant) {
+bool isUnproductiveCppPattern(Blob file, Offset o, const(ubyte)[] mutant) {
     static immutable ubyte[2] ctorParenthesis = ['(', ')'];
     static immutable ubyte[2] ctorCurly = ['{', '}'];
     static immutable ubyte zero = '0';
@@ -125,7 +125,7 @@ bool isUndesiredCppPattern(Blob file, Offset o, const(ubyte)[] mutant) {
     static immutable ubyte[5] false_ = ['f', 'a', 'l', 's', 'e'];
     static immutable ubyte[4] true_ = ['t', 'r', 'u', 'e'];
 
-    // e.g. delete of the constructor {} is undesired. It is almost always an
+    // e.g. delete of the constructor {} is unproductive. It is almost always an
     // equivalent mutant.
     if (o.end - o.begin == 2 && file.content[o.begin .. o.end].among(ctorParenthesis[],
             ctorCurly[])) {

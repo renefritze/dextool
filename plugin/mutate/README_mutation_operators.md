@@ -59,11 +59,11 @@ of an operator are of boolean type.
 #### ROR for Floating Points
 
 The purpose of the special casing of floating points are to reduce the number
-of undesired/junk mutants.
+of unproductive/junk mutants.
 
 Strict equal is not recommended to ever use for floating point numbers. Because
 of this the test suite is probably not designed to catch these type of
-mutations which lead to *undesired* mutants. They are *technically* not
+mutations which lead to *unproductive* mutants. They are *technically* not
 equivalent but they aren't supposed to be caught because the SUT is never
 supposed to do these type of operations.
 
@@ -127,7 +127,7 @@ mutants for the third line should be `true` and `false`.
 
 #### ROR for Pointers
 
-The goal is to reduce the number of undesired mutants when the user of the
+The goal is to reduce the number of unproductive mutants when the user of the
 plugin has knowledge about the internal design of the program.
 
 This schema can't fully replace parts of ROR because there are programs that

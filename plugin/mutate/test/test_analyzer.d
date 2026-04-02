@@ -57,11 +57,11 @@ unittest {
         .run;
 }
 
-@(testId ~ "shall drop the undesired mutants when analyzing")
+@(testId ~ "shall drop the unproductive mutants when analyzing")
 unittest {
     mixin(EnvSetup(globalTestdir));
     auto r = makeDextoolAnalyze(testEnv)
-        .addInputArg(testData ~ "undesired_mutants.cpp")
+        .addInputArg(testData ~ "unproductive_mutants.cpp")
         .addFlag("-std=c++11")
         .run;
 
