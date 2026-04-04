@@ -27,6 +27,22 @@ make check
 make check_integration
 ```
 
+# Optional Linker Configuration
+
+The build can use the `mold` linker, which may reduce link time for larger
+builds.
+
+`DEXTOOL_USE_MOLD` controls this behavior:
+ * `AUTO` (default): use `mold` if found in `$PATH`
+ * `ON`: require `mold`; CMake fails if it is missing
+ * `OFF`: never use `mold`
+
+Example:
+```sh
+cd build
+cmake -DDEXTOOL_USE_MOLD=ON ..
+```
+
 # API Documentation
 
 This describes how to build the API documentation for Dextool (all plugins and the support libraries).

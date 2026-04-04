@@ -10,6 +10,29 @@ if(NOT LIBCLANG_LIB_PATH OR NOT LIBCLANG_LDFLAGS)
 endif()
 include(BuildD)
 
+set(DEXTOOL_USE_MOLD "AUTO" CACHE STRING "Use mold linker: AUTO, ON, or OFF")
+set_property(CACHE DEXTOOL_USE_MOLD PROPERTY STRINGS AUTO ON OFF)
+
+if(NOT DEXTOOL_USE_MOLD MATCHES "^(AUTO|ON|OFF)$")
+    message(FATAL_ERROR
+        "DEXTOOL_USE_MOLD must be one of AUTO, ON, or OFF (got '${DEXTOOL_USE_MOLD}')")
+endif()
+
+if(UNIX AND NOT DEXTOOL_USE_MOLD STREQUAL "OFF")
+    find_program(DEXTOOL_MOLD_PROGRAM mold)
+    if(DEXTOOL_MOLD_PROGRAM)
+        foreach(linker_flag_var
+                CMAKE_EXE_LINKER_FLAGS
+                CMAKE_SHARED_LINKER_FLAGS
+                CMAKE_MODULE_LINKER_FLAGS)
+            append("-fuse-ld=mold" ${linker_flag_var})
+        endforeach()
+        message(STATUS "Using mold linker via -fuse-ld=mold (${DEXTOOL_MOLD_PROGRAM})")
+    elseif(DEXTOOL_USE_MOLD STREQUAL "ON")
+        message(FATAL_ERROR "DEXTOOL_USE_MOLD=ON, but no 'mold' executable was found in PATH")
+    endif()
+endif()
+
 #
 # Tool preparation
 #
