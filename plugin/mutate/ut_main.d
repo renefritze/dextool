@@ -12,6 +12,7 @@ int main(string[] args) {
     return args.runTests!(
                           "dextool.plugin.mutate.backend.analyze",
                           "dextool.plugin.mutate.backend.analyze.pass_clang",
+                          "dextool.plugin.mutate.backend.analyze.pass_filter",                          
                           "dextool.plugin.mutate.backend.analyze.pass_schemata",
                           "dextool.plugin.mutate.backend.analyze.schema_ml",
                           "dextool.plugin.mutate.backend.diff_parser",
