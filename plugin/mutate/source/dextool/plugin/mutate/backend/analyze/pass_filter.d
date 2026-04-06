@@ -139,59 +139,131 @@ bool isUnproductiveCppPattern(Blob file, Offset o, const(ubyte)[] mutant) {
         return true;
     }
 
-    // replacing zero-valued integer literals with plain '0' is equivalent
-    if (isEquivalentZeroMutant(file.content[o.begin .. o.end], mutant)) {
+    // replacing zero-valued literals with plain zero is equivalent
+    const original = file.content[o.begin .. o.end];
+    if (isEquivalentZeroIntMutant(original, mutant)
+            || isEquivalentZeroFloatMutant(original, mutant)) {
         return true;
     }
 
     return false;
 }
 
-bool isEquivalentZeroMutant(const(ubyte)[] original, const(ubyte)[] mutant) {
-    if (original.length < 2 || mutant != ['0']) {
+bool isEquivalentZeroIntMutant(const(ubyte)[] original, const(ubyte)[] mutant) {
+    import std.algorithm.searching : canFind;
+
+    static immutable ubyte[11] ignoredChars = ['u', 'U', 'l', 'L', 'z', 'Z', 'x', 'X', 'b',
+        'B', '\''];
+
+    return mutant == ['0']
+        && original.all!(c => c == '0' || ignoredChars[].canFind(c));
+}
+
+bool isEquivalentZeroFloatMutant(const(ubyte)[] original, const(ubyte)[] mutant) {
+    if (mutant != ['0','.','0']) {
         return false;
     }
 
-    const normalized = stripIgnoredIntegerLiteralChars(original);
-    return !normalized.empty && normalized.all!(c => c == '0');
+    const literal = stripFloatingLiteralSuffix(original);
+    if (literal.length >= 2 && literal[0] == '0' && literal[1].among('x', 'X')) {
+        return isZeroHexFloatingLiteral(literal);
+    }
+
+    return isZeroDecimalFloatingLiteral(literal);
 }
 
-const(ubyte)[] stripIgnoredIntegerLiteralChars(const(ubyte)[] literal) {
-    import std.algorithm.searching : canFind;
-    import std.array : array;
+const(ubyte)[] stripFloatingLiteralSuffix(const(ubyte)[] literal) {
+    import std.algorithm.searching : endsWith;
 
-    static immutable ubyte[13] ignoredChars = ['u', 'U', 'l', 'L', 'v', 'V', 'z', 'Z', 'x',
-        'X', 'b', 'B', '\''];
+    static immutable suffixes = [
+        "bf16", "BF16", "f128", "F128", "f64", "F64", "f32", "F32", "f16",
+        "F16", "f", "F", "l", "L"
+    ];
 
-    return literal.filter!(c => !ignoredChars[].canFind(c)).array;
+    foreach (suffix; suffixes) {
+        const suffixBytes = cast(const(ubyte)[]) suffix;
+        if (literal.length > suffixBytes.length && literal.endsWith(suffixBytes)) {
+            return literal[0 .. $ - suffixBytes.length];
+        }
+    }
+
+    return literal;
 }
 
-@("shall treat zero-valued integer literals as equivalent to plain 0")
+bool isZeroDecimalFloatingLiteral(const(ubyte)[] literal) {
+    import std.algorithm.searching : countUntil;
+
+    const exponentPos = literal.countUntil!(c => c == 'e' || c == 'E');
+    const significand = exponentPos >= 0 ? literal[0 .. exponentPos] : literal;
+    return isZeroFloatingSignificand(significand);
+}
+
+bool isZeroHexFloatingLiteral(const(ubyte)[] literal) {
+    import std.algorithm.searching : countUntil;
+
+    const significand = literal[2 .. $];
+    const exponentPos = significand.countUntil!(c => c == 'p' || c == 'P');
+    assert(exponentPos >= 0);
+    return isZeroFloatingSignificand(significand[0 .. exponentPos]);
+}
+
+bool isZeroFloatingSignificand(const(ubyte)[] literal) {
+    return literal.all!(c => c.among('0', '.', '\''));
+}
+
+// TODO: move these newer C++ literal cases to the analyzer integration tests
+// once the oldest supported LLVM/libclang can parse them there:
+// - C++23 z/Z integer suffixes
+// - C++23 fixed-width floating suffixes
+// - C++17 hex floating literals
+@("shall treat zero-valued C++23 integer literals as equivalent to plain 0")
 @safe unittest {
     import unit_threaded : shouldBeTrue;
 
     foreach (literal; [
-        "0u", "0U", "0l", "0L", "0ll", "0LL", "0ul", "0uL", "0Ul", "0UL",
-        "0lu", "0lU", "0Lu", "0LU", "0ull", "0uLL", "0Ull", "0ULL", "0llu",
-        "0llU", "0LLu", "0LLU", "0z", "0Z", "00", "00z", "0uz", "0uZ", "0Uz",
-        "0UZ", "0zu", "0zU", "0Zu", "0ZU", "000", "0x0", "0x0ULL", "0x00",
-        "0x00ULL", "0x0z", "0x0UZ", "0x0'000'000", "0b0", "0B0", "0b0z", "0b00",
-        "0B0000ULL", "0000u", "0x0000u", "0X0000ULL", "0'0'0'0", "0'0z",
-        "0'000'000'000", "0'000'000'000llu"
+        "0z", "0Z", "00z", "0uz", "0uZ", "0Uz", "0UZ", "0zu", "0zU", "0Zu",
+        "0ZU", "0x0z", "0x0UZ", "0b0z", "0'0z"
     ]) {
-        isEquivalentZeroMutant(cast(const(ubyte)[])literal, ['0']).shouldBeTrue;
+        isEquivalentZeroIntMutant(cast(const(ubyte)[]) literal, ['0']).shouldBeTrue;
     }
 }
 
-@("shall not treat non-zero integer literals as equivalent to plain 0")
+@("shall not treat non-zero C++23 integer literals as equivalent to plain 0")
 @safe unittest {
     import unit_threaded : shouldBeFalse;
 
     foreach (literal; [
-        "1", "01", "01u", "0001", "0x1", "0x0001ULL", "0X2A", "0b1", "0b0001",
-        "0b101010", "052", "0x2a", "0xFFu", "18'446'744'073'709'550'592llu",
-        "1844'6744'0737'0955'0592uLL", "184467'440737'0'95505'92LLU"
+        "1z", "1Z", "01z", "01uZ", "0x1z", "0x1UZ", "0b1z", "0b1UZ",
+        "1'000z"
     ]) {
-        isEquivalentZeroMutant(cast(const(ubyte)[])literal, ['0']).shouldBeFalse;
+        isEquivalentZeroIntMutant(cast(const(ubyte)[]) literal, ['0']).shouldBeFalse;
+    }
+}
+
+@("shall treat zero-valued C++17 and newer floating literals as equivalent to plain 0.0")
+@safe unittest {
+    import unit_threaded : shouldBeTrue;
+
+    foreach (literal; [
+        "0.0f16", "0.0F16", "0.0bf16", "0.0BF16", "0.0f32", "0.0F32", "0.0f64",
+        "0.0F64", "0.0f128", "0.0F128", "0x0p0", "0X0P-1", "0x0.p0", "0x.0p+0",
+        "0x0.0p1", "0x0'0.0'0p1'0L", "0x0p0F16"
+    ]) {
+        isEquivalentZeroFloatMutant(cast(const(ubyte)[]) literal, ['0', '.', '0'])
+            .shouldBeTrue;
+    }
+}
+
+@("shall not treat non-zero C++17 and newer floating literals as equivalent to plain 0.0")
+@safe unittest {
+    import unit_threaded : shouldBeFalse;
+
+    foreach (literal; [
+        "1.0F16", "42.0f16", "1.0bf16", "1.0BF16", "1.0f32", "1.0F32", "1.0f64",
+        "1.0F64", "1.0f128", "1.0F128", "0x1p0", "0x0.1p0", "0x1.0p-1",
+        "0x1'0.0p-4F"
+    ]) {
+        isEquivalentZeroFloatMutant(cast(const(ubyte)[]) literal, ['0', '.', '0'])
+            .shouldBeFalse;
     }
 }
