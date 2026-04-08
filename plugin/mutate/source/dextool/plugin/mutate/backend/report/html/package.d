@@ -904,6 +904,7 @@ void generateFile(ref Database db, ref FileCtx ctx) @trusted {
 
 Document makeDashboard() @trusted {
     import dextool.plugin.mutate.backend.resource : dashboard, jsIndex;
+    import dextool.utility : dextoolVersion;
 
     auto data = dashboard();
 
@@ -922,6 +923,8 @@ Document makeDashboard() @trusted {
 
     // jsIndex provide init()
     doc.mainBody.setAttribute("onload", "init()");
+    doc.mainBody.getElementById("reportHeaderMeta")
+        .appendText(dextoolVersion.get ~ " \u2022 Report generated:");
 
     return doc;
 }

@@ -25,13 +25,20 @@ body {
   border: 0;
 }
 
-.navbar-date {
+.navbar-fixed-top .container-fluid {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-report-meta {
+  display: flex;
   color: #428bca;
-  float: right;
   height: 50px;
+  margin-left: auto;
   padding: 15px 15px;
   line-height: 20px;
   font-size: medium;
+  white-space: nowrap;
 }
 
 /*
