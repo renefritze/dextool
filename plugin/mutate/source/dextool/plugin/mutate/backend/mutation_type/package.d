@@ -73,23 +73,28 @@ private:
 
 immutable MutationKind[Mutation.Kind] fromInteralKindToUserKind;
 
-shared static this() {
+shared static this() @system {
     import std.traits : EnumMembers;
 
-    static foreach (const group; EnumMembers!MutationKind) {
+    MutationKind[Mutation.Kind] tmpKind;
+    foreach (const group; EnumMembers!MutationKind) {
         foreach (const internal; toInternal([group])) {
-            fromInteralKindToUserKind[internal] = group;
+            tmpKind[internal] = group;
         }
     }
 
-    mutationDescription[MutationKind.ror] = "Relational operator replacement";
-    mutationDescription[MutationKind.rorp] = "Relational operator replacement for pointers";
-    mutationDescription[MutationKind.lcr] = "Logical connector replacement";
-    mutationDescription[MutationKind.aor] = "Arithmetic operator replacement";
-    mutationDescription[MutationKind.uoi] = "Unary operator insert";
-    mutationDescription[MutationKind.sdl] = "Statement deletion";
-    mutationDescription[MutationKind.dcr] = "Decision/Condition requirement";
-    mutationDescription[MutationKind.lcrb] = "Logical connector replacement bit-wise";
-    mutationDescription[MutationKind.aors] = "Arithmetic operator replacement simple";
-    mutationDescription[MutationKind.cr] = "Constant replacement";
+    string[MutationKind] tmpDesc;
+    tmpDesc[MutationKind.ror] = "Relational operator replacement";
+    tmpDesc[MutationKind.rorp] = "Relational operator replacement for pointers";
+    tmpDesc[MutationKind.lcr] = "Logical connector replacement";
+    tmpDesc[MutationKind.aor] = "Arithmetic operator replacement";
+    tmpDesc[MutationKind.uoi] = "Unary operator insert";
+    tmpDesc[MutationKind.sdl] = "Statement deletion";
+    tmpDesc[MutationKind.dcr] = "Decision/Condition requirement";
+    tmpDesc[MutationKind.lcrb] = "Logical connector replacement bit-wise";
+    tmpDesc[MutationKind.aors] = "Arithmetic operator replacement simple";
+    tmpDesc[MutationKind.cr] = "Constant replacement";
+
+    fromInteralKindToUserKind = cast(immutable) tmpKind;
+    mutationDescription = cast(immutable) tmpDesc;
 }

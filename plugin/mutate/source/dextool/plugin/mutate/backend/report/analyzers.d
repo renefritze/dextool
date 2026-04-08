@@ -1209,11 +1209,15 @@ ScoreTrendByCodeChange reportTrendByCodeChange(ref Database db) @trusted nothrow
 
     typeof(return) rval;
     foreach (a; lastChange.byValue) {
-        rval.sample.update(a.timeStamp, () => ScoreTrendByCodeChange.PointGroup(
-                [ScoreTrendByCodeChange.Point(a.file, a.score.get)]),
-                (ref ScoreTrendByCodeChange.PointGroup x) {
-            x.points ~= ScoreTrendByCodeChange.Point(a.file, a.score.get);
-        });
+        try {
+            rval.sample.update(a.timeStamp,
+                    () => ScoreTrendByCodeChange.PointGroup([
+                        ScoreTrendByCodeChange.Point(a.file, a.score.get)
+            ]), (ref ScoreTrendByCodeChange.PointGroup x) {
+                x.points ~= ScoreTrendByCodeChange.Point(a.file, a.score.get);
+            });
+        } catch (Exception e) {
+        }
     }
 
     foreach (k; rval.sample.byKey) {

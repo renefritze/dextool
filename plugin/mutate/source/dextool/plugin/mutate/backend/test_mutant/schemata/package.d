@@ -1187,7 +1187,7 @@ struct InjectIdBuilder {
     void put(MutationStatusId id, Checksum cs) @safe pure nothrow {
         import dextool.plugin.mutate.backend.analyze.pass_schemata : checksumToId;
 
-        const injectId = checksumToId(cs);
+        auto injectId = checksumToId(cs);
         debug logger.tracef("%s %s %s", id, cs, injectId).collectException;
 
         if (injectId in collisions) {
