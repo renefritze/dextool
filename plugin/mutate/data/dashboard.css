@@ -7,6 +7,19 @@ body {
   padding-top: 50px;
 }
 
+/* Keep anchor targets visible below the fixed top navigation. */
+:root {
+  --anchor-scroll-offset: 30px;
+}
+
+html {
+  scroll-padding-top: var(--anchor-scroll-offset);
+}
+
+#content a[id] {
+  scroll-margin-top: var(--anchor-scroll-offset);
+}
+
 
 /*
  * Global add-ons
