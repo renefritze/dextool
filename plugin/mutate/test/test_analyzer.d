@@ -78,12 +78,12 @@ unittest {
     import std.array : array;
     import std.file : readText;
     import std.json : parseJSON;
+    import std.range : iota;
     mixin(EnvSetup(globalTestdir));
 
     makeDextoolAnalyze(testEnv)
-        .addInputArg(testData ~ "undesired_zero_literals.cpp")
+        .addInputArg(testData ~ "undesired_zero_integer_literals.cpp")
         .addArg(["--mutant", "cr"])
-        // For binary literals like 0b0.
         .addFlag("-std=c++14")
         .run;
 
@@ -97,7 +97,7 @@ unittest {
 
     fileReports.length.shouldEqual(1);
 
-    const expectedCrZeroIntLines = [3L, 4, 5, 6, 7, 8, 9, 10];
+    const expectedCrZeroIntLines = iota(3L, 19L).array;
     auto actualCrZeroIntLines = fileReports[0]["mutants"].array
         .filter!(a => a["kind"].str == "crZeroInt")
         .map!(a => a["line"].integer)
@@ -105,6 +105,42 @@ unittest {
         .sort;
 
     actualCrZeroIntLines.shouldEqual(expectedCrZeroIntLines);
+}
+
+@(testId ~ "shall drop equivalent zero-valued floating-point literal mutants when analyzing")
+unittest {
+    import std.algorithm : filter, map;
+    import std.algorithm.sorting : sort;
+    import std.array : array;
+    import std.file : readText;
+    import std.json : parseJSON;
+    import std.range : iota;
+    mixin(EnvSetup(globalTestdir));
+
+    makeDextoolAnalyze(testEnv)
+        .addInputArg(testData ~ "undesired_zero_float_literals.cpp")
+        .addArg(["--mutant", "cr"])
+        .addFlag("-std=c++14")
+        .run;
+
+    makeDextoolReport(testEnv, testData.dirName)
+        .addArg(["--style", "json"])
+        .addArg(["--section", "all_mut"])
+        .addArg(["--logdir", testEnv.outdir.toString])
+        .run;
+
+    const fileReports = parseJSON(readText((testEnv.outdir ~ "report.json").toString))["files"].array;
+
+    fileReports.length.shouldEqual(1);
+
+    const expectedCrZeroFloatLines = iota(3L, 12L).array;
+    auto actualCrZeroFloatLines = fileReports[0]["mutants"].array
+        .filter!(a => a["kind"].str == "crZeroFloat")
+        .map!(a => a["line"].integer)
+        .array
+        .sort;
+
+    actualCrZeroFloatLines.shouldEqual(expectedCrZeroFloatLines);
 }
 
 @(testId ~ "shall detect changes in dependencies based on #include")
