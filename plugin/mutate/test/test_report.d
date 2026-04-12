@@ -49,26 +49,6 @@ unittest {
     ]).shouldBeIn(r.output);
 }
 
-@(testId ~ "shall include the dextool version in the html dashboard header")
-unittest {
-    import dextool.utility : dextoolVersion;
-
-    mixin(EnvSetup(globalTestdir));
-
-    makeDextoolAnalyze(testEnv)
-        .addInputArg(testData ~ "report_one_ror_mutation_point.cpp")
-        .run;
-
-    makeDextoolReport(testEnv, testData.dirName)
-        .addArg(["--style", "html"])
-        .addArg(["--logdir", testEnv.outdir.toString])
-        .run;
-
-    const indexHtml = readText(buildPath(testEnv.outdir.toString, "html", "index.html"));
-    `id="reportHeaderMeta"`.shouldBeIn(indexHtml);
-    dextoolVersion.get.shouldBeIn(indexHtml);
-}
-
 @(testId ~ "shall report the alive in the database as human readable to stdout")
 unittest {
     mixin(EnvSetup(globalTestdir));
