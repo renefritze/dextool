@@ -7,13 +7,29 @@
 #   libs        - List of a library or many quoted and separated by ; to link with
 function(build_d_executable name input_d compiler_args linker_args libs)
     set(dflags "${D_COMPILER_FLAGS} ${DDMD_DFLAGS} ${DDMD_LFLAGS} ${compiler_args}")
-    set(lflags "${linker_args}")
+    compile_d_binary(${name} "${input_d}" "${dflags}" "${linker_args}" "${libs}" TRUE)
+endfunction()
+
+#=============================================================================#
+# [PRIVATE]
+# Build a D executable target from the supplied sources and flags.
+#   name         - Target name for the executable
+#   input_d      - List of a source file or many quoted and separated by ;
+#   dflags       - Arguments for the D compiler when compiling a source file
+#   lflags       - Arguments for the linker when creating the executable
+#   libs         - List of a library or many quoted and separated by ; to link with
+#   build_in_all - TRUE to include the target in the default "all" build
+function(compile_d_binary name input_d dflags lflags libs build_in_all)
     conv_to_proper_args(dflags "${dflags}")
     conv_to_proper_args(lflags "${lflags}")
 
     set(object_file ${CMAKE_CURRENT_BINARY_DIR}/${name}${CMAKE_CXX_OUTPUT_EXTENSION})
     compile_d_module("${input_d}" "${dflags}" ${object_file})
     add_executable(${name} ${object_file})
+
+    if(NOT build_in_all)
+        set_property(TARGET ${name} PROPERTY EXCLUDE_FROM_ALL TRUE)
+    endif()
 
     set_target_properties(${name} PROPERTIES
         LINKER_LANGUAGE D
@@ -98,32 +114,7 @@ function(compile_d_unittest name input_d compiler_args linker_args libs)
 
     set(target_name ${name}_unittest)
     set(dflags "${DDMD_DFLAGS} ${compiler_args} -unittest ${UNIT_THREADED_IMPORT}")
-    set(lflags "${linker_args}")
-
-    if (TEST_WITH_COV AND "${D_COMPILER_ID}" STREQUAL "DigitalMars")
-        append("${DDMD_COV_FLAG}" dflags)
-    endif()
-    #if("${D_COMPILER_ID}" STREQUAL "DigitalMars")
-    #    append("-cov" dflags)
-    #endif()
-
-    conv_to_proper_args(dflags "${dflags}")
-    conv_to_proper_args(lflags "${lflags}")
-
-    # create the executable
-    set(object_file ${CMAKE_CURRENT_BINARY_DIR}/${target_name}${CMAKE_CXX_OUTPUT_EXTENSION})
-    compile_d_module("${input_d}" "${dflags}" ${object_file})
-    add_executable(${target_name} EXCLUDE_FROM_ALL ${object_file})
-    set_target_properties(${target_name} PROPERTIES
-        LINKER_LANGUAGE D
-        COMPILE_FLAGS ""
-        LINK_FLAGS "${lflags}"
-        )
-
-    # link libraries to executable
-    foreach (lib "${libs};dextool_unit_threaded")
-        target_link_libraries(${target_name} ${lib})
-    endforeach()
+    compile_d_binary(${target_name} "${input_d}" "${dflags}" "${linker_args}" "${libs};dextool_unit_threaded" FALSE)
 
     add_unittest_to_check(${target_name})
 endfunction()
@@ -150,30 +141,13 @@ function(compile_d_integration_test name input_d compiler_args linker_args libs 
 
     set(target_name ${name}_integration)
     set(dflags "${DDMD_DFLAGS} ${compiler_args} -unittest ${UNIT_THREADED_IMPORT} -I${CMAKE_SOURCE_DIR}/test/source -I${CMAKE_SOURCE_DIR}/vendor/proc/source -I${CMAKE_SOURCE_DIR}/vendor/mylib/source")
-    set(lflags "${linker_args}")
-
-    conv_to_proper_args(dflags "${dflags}")
-    conv_to_proper_args(lflags "${lflags}")
-
-    # create the executable
-    set(object_file ${CMAKE_CURRENT_BINARY_DIR}/${target_name}${CMAKE_CXX_OUTPUT_EXTENSION})
-    compile_d_module("${input_d}" "${dflags}" ${object_file})
-    add_executable(${target_name} EXCLUDE_FROM_ALL ${object_file})
-    set_target_properties(${target_name} PROPERTIES
-        LINKER_LANGUAGE D
-        COMPILE_FLAGS ""
-        LINK_FLAGS "${lflags}"
-        )
-
-    # link libraries to executable
-    foreach (lib "${libs};dextool_unit_threaded;dextool_dextool_test")
-        target_link_libraries(${target_name} ${lib})
-    endforeach()
+    compile_d_binary(${target_name} "${input_d}" "${dflags}" "${linker_args}" "${libs};dextool_unit_threaded;dextool_dextool_test" FALSE)
 
     # make cmake aware that the executable is a test
     add_test(NAME ${target_name}_
         COMMAND ${target_name}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    append_d_coverage_env_to_test(${target_name}_)
     # build a dependency that mean that when check triggers it triggers a rerun
     # which in turn is dependent on the executable
     add_custom_command(OUTPUT "${target_name}.stamp"

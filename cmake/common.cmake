@@ -97,9 +97,10 @@ function(add_unittest_to_check name)
 
     # note that the working directory is to collect all coverage data in one
     # place to easily provide it to codecov or other tooling.
-    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/coverage)
+    file(MAKE_DIRECTORY ${DEXTOOL_D_COVERAGE_DIR})
 
-    add_test(NAME ${name}_ COMMAND ${name} WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/coverage)
+    add_test(NAME ${name}_ COMMAND ${name} WORKING_DIRECTORY ${DEXTOOL_D_COVERAGE_DIR})
+    append_d_coverage_env_to_test(${name}_)
     # build a dependency that mean that when check triggers it triggers a rerun
     # which in turn is dependent on the executable
     add_custom_command(OUTPUT "${name}.stamp"
@@ -111,4 +112,16 @@ function(add_unittest_to_check name)
     set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${name}.stamp")
     add_custom_target("${name}__run" DEPENDS "${name}.stamp")
     add_dependencies(check "${name}__run")
+endfunction()
+
+#=============================================================================#
+# [PUBLIC]
+# Append the D runtime coverage environment to a registered CTest test.
+#   name        - Name of the registered CTest test
+function(append_d_coverage_env_to_test name)
+    if(TEST_WITH_COV)
+        file(MAKE_DIRECTORY ${DEXTOOL_D_COVERAGE_DIR})
+        set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
+            "DRT_COVOPT=merge:1 dstpath:${DEXTOOL_D_COVERAGE_DIR}")
+    endif()
 endfunction()
