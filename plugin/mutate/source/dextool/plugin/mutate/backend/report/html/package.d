@@ -940,6 +940,15 @@ void addNavbarItems(NavbarItem[] items, Element root) @trusted {
     }
 }
 
+Element makeNarrowScreenNavbar(Element root) @trusted {
+    auto nav = root.addChild("ul");
+    nav.setAttribute("id", "navbar-narrow-screen");
+    nav.addClass("nav");
+    nav.addClass("navbar-nav");
+    nav.addClass("visible-xs-block");
+    return nav;
+}
+
 struct InitMsg {
 }
 
@@ -1491,6 +1500,7 @@ auto spawnOverviewActor(OverviewActor.Impl self, FlowControlActor.Address flowCt
         ctx.state.files.toIndex(content, HtmlStyle.fileDir);
 
         addNavbarItems(navbarItems, index.mainBody.getElementById("navbar-sidebar"));
+        addNavbarItems(navbarItems, makeNarrowScreenNavbar(index.mainBody.getElementById("navbar")));
 
         File(buildPath(ctx.state.logDir, "index" ~ HtmlStyle.ext), "w").write(index.toPrettyString);
     }
