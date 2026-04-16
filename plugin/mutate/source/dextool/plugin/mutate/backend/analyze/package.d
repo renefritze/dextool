@@ -506,7 +506,9 @@ auto spawnStoreActor(StoreActor.Impl self, AbsolutePath dbPath, FlowControlActor
         try {
             auto profile = Profile("save test files");
 
+            // in case anything happens with the DB the flag is set now. The worst that happens is that the test files aren't saved this analyze run.
             ctx.state.savedTestFileResult = true;
+            send(ctx.self, CheckPostProcess.init);
 
             Set!Checksum old;
 
@@ -526,8 +528,6 @@ auto spawnStoreActor(StoreActor.Impl self, AbsolutePath dbPath, FlowControlActor
             }
 
             t.commit;
-
-            send(ctx.self, CheckPostProcess.init);
         } catch (Exception e) {
             logger.trace("should not happend as long as the sqlite database is OK")
                 .collectException;
