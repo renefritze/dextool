@@ -46,6 +46,7 @@ execute_process(
 
 set(TEST_WITH_COV false CACHE BOOL "true to run unittest with coverage")
 set(BUILD_TEST false CACHE BOOL "true to build and run unittests")
+set(DEXTOOL_D_COVERAGE_DIR "${CMAKE_BINARY_DIR}/coverage")
 if(BUILD_TEST)
     enable_testing()
     add_custom_target(check)
@@ -77,6 +78,17 @@ set(DDMD_LFLAGS "")
 set(DDMD_COV_FLAG "-cov")
 set(ACTOR_EXTRA_TRACE false CACHE BOOL "true to activate detailed logging of all actor interaction, message etc")
 
+if(TEST_WITH_COV)
+    if(NOT "${D_COMPILER_ID}" STREQUAL "DigitalMars" AND
+       NOT "${D_COMPILER_ID}" STREQUAL "LDMD")
+        message(FATAL_ERROR
+            "TEST_WITH_COV requires a D compiler with DMD-compatible coverage support. "
+            "Use dmd or ldmd2; current D_COMPILER_ID is '${D_COMPILER_ID}'.")
+    endif()
+
+    append("${DDMD_COV_FLAG}" DDMD_DFLAGS)
+endif()
+
 # for multi-config builds, these options have to be added later to the custom command
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
     append("-g -debug" DDMD_DFLAGS)
@@ -85,13 +97,13 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug")
     endif()
     if("${D_COMPILER_ID}" STREQUAL "LDMD")
         append("-O0 -link-debuglib" DDMD_DFLAGS)
-    elseif("${D_COMPILER_ID}" STREQUAL "DMD")
+    elseif("${D_COMPILER_ID}" STREQUAL "DigitalMars")
         append("-verrors=context" DDMD_DFLAGS)
     endif()
 elseif(CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo")
     if("${D_COMPILER_ID}" STREQUAL "LDMD")
         append("-g -enable-inlining -O5 -release" DDMD_DFLAGS)
-    elseif("${D_COMPILER_ID}" STREQUAL "DMD")
+    elseif("${D_COMPILER_ID}" STREQUAL "DigitalMars")
         append("-g -release" DDMD_DFLAGS)
     endif()
 else()

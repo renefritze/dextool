@@ -18,6 +18,11 @@ This optional main function requires that:
 */
 module dextool.plugin.main.standard;
 
+debug {
+    // Allow debug-built plugin binaries to honor DRT_* environment variables.
+    extern(C) __gshared bool rt_envvars_enabled = true;
+}
+
 import logger = std.experimental.logger;
 import std.algorithm : filter, among, findAmong, canFind, sort;
 import std.array : array, empty, appender;

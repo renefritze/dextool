@@ -43,6 +43,28 @@ cd build
 cmake -DDEXTOOL_USE_MOLD=ON ..
 ```
 
+# Coverage Builds
+
+To measure code coverage for the D implementation itself, configure a debug/test
+build with `TEST_WITH_COV=ON` and use a DMD-compatible compiler frontend. Both
+`dmd` and `ldmd2` are supported by the CMake coverage flow, but `ldmd2` is
+recommended because current integration tests are known to fail with `dmd`.
+
+Example:
+```sh
+cmake -S . -B build-cov \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DBUILD_TEST=ON \
+  -DTEST_WITH_COV=ON \
+  -DD_COMPILER="$(command -v ldmd2)"
+
+cmake --build build-cov --target dextool_debug
+cmake --build build-cov --target check --parallel
+cmake --build build-cov --target check_integration --parallel
+```
+
+Coverage output is written to `build-cov/coverage`.
+
 # API Documentation
 
 This describes how to build the API documentation for Dextool (all plugins and the support libraries).
