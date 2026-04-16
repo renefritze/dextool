@@ -1,3 +1,8 @@
-RUN curl -fsS https://dlang.org/install.sh | bash -s ldc-$LDC_VERSION
-ENV PATH="/root/dlang/ldc-$LDC_VERSION/bin:$PATH"
+RUN curl -L https://github.com/ldc-developers/ldc/releases/download/v${LDC_VERSION}/ldc2-${LDC_VERSION}-linux-x86_64.tar.xz \
+    -o ldc.tar.xz \
+ && tar -xf ldc.tar.xz \
+ && mv ldc2-${LDC_VERSION}-linux-x86_64 /opt/ldc
+
+ENV PATH="/opt/ldc/bin:$PATH"
+
 ENV DC="ldc2"
