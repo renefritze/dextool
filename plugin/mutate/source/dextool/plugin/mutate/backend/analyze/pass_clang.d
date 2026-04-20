@@ -353,8 +353,8 @@ final class BaseVisitor : ExtendedVisitor {
     analyze.Ast* ast;
     Appender!(Path[]) includes;
 
-    /// Keep track of visited nodes to avoid circulare references.
-    Set!size_t isVisited;
+    /// Keep track of the active cursor path to avoid recursive re-entry.
+    Set!size_t activeCursorPath;
 
     Blacklist blacklist;
 
@@ -379,18 +379,32 @@ final class BaseVisitor : ExtendedVisitor {
         return cstack[$ - 1].data == k;
     }
 
-    /** If a node should be visited and in that case mark it as visited to
-     * block infinite recursion. */
-    bool shouldSkipOrMark(size_t h) @safe {
-        if (h in isVisited)
+    private bool shouldTraverseCursor(scope const Cursor cursor) scope @trusted {
+        if (cursor.kind == CXCursorKind.CXCursor_TranslationUnit)
             return true;
-        isVisited.add(h);
-        return false;
+        const path = cursor.location.path;
+        if (path.empty)
+            return true;
+        const absPath = AbsolutePath(path);
+        return vloc.shouldAnalyze(absPath) || vloc.shouldMutate(absPath);
+    }
+
+    bool enterCursor(scope const Cursor cursor) scope @safe {
+        if (!shouldTraverseCursor(cursor))
+            return false;
+        const h = cursor.toHash;
+        if (h in activeCursorPath)
+            return false;
+        activeCursorPath.add(h);
+        return true;
+    }
+
+    void leaveCursor(scope const Cursor cursor) scope @safe {
+        activeCursorPath.remove(cursor.toHash);
     }
 
     override bool precondition() scope @safe {
-        // to avoid infinite recursion, which may occur in e.g. postgresql, block
-        // segfault on 300
+        // this prevents memory exhaustion and stack smash.
         return indent < 150;
     }
 
@@ -665,12 +679,8 @@ final class BaseVisitor : ExtendedVisitor {
     // TODO overlapping logic with Expression. deduplicate
     override void visit(scope const DeclRefExpr v) @trusted {
         import libclang_ast.ast : dispatch;
-        import clang.SourceRange : intersects;
 
         mixin(mixinNodeLog!());
-
-        if (shouldSkipOrMark(v.cursor.toHash))
-            return;
 
         // TODO: maybe a new node, DeclRef, is needed?
         auto ref_ = ast.make!(analyze.DeclRef);
@@ -719,9 +729,6 @@ final class BaseVisitor : ExtendedVisitor {
         import libclang_ast.ast : dispatch;
 
         mixin(mixinNodeLog!());
-
-        if (shouldSkipOrMark(v.cursor.toHash))
-            return;
 
         auto ref_ = ast.make!(analyze.FieldRef);
         pushStack(ref_, v);
@@ -788,9 +795,6 @@ final class BaseVisitor : ExtendedVisitor {
 
     override void visit(scope const Expression v) {
         mixin(mixinNodeLog!());
-
-        if (shouldSkipOrMark(v.cursor.toHash))
-            return;
 
         auto n = ast.make!(analyze.Expr);
         n.schemaBlacklist = isParent(CXCursorKind.CXCursor_ClassTemplate,
@@ -1174,10 +1178,6 @@ final class BaseVisitor : ExtendedVisitor {
         if (op.isNull)
             return false;
 
-        // it was meant to be visited but has already been visited so skipping.
-        if (shouldSkipOrMark(v.cursor.toHash))
-            return true;
-
         if (visitBinaryOp(v.cursor, op.get, cKind))
             return true;
         return visitUnaryOp(v.cursor, op.get, cKind);
@@ -1368,9 +1368,6 @@ final class BaseVisitor : ExtendedVisitor {
     }
 
     private void visitCall(T)(scope const T v) @trusted {
-        if (shouldSkipOrMark(v.cursor.toHash))
-            return;
-
         auto n = ast.make!(analyze.Call);
         // TODO: user defined literal. Can't generate correct mutants for them
         // yet thus they are all killed by the compiler.
@@ -1384,13 +1381,7 @@ final class BaseVisitor : ExtendedVisitor {
         if (ty.symbol !is null)
             ast.put(n, ty.symId);
 
-        // TODO: there is a recursion bug wherein the visitor end up in a loop.
-        // Adding the nodes to isVisited do not work because they seem to
-        // always have a new checksum.  This is thus an ugly fix to just block
-        // when it is too deep.
-        if (indent < 200) {
-            v.accept(this);
-        }
+        v.accept(this);
     }
 }
 

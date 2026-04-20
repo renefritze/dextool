@@ -93,8 +93,26 @@ void dispatch(VisitorT)(scope const Cursor cursor, scope VisitorT visitor) @trus
     import libclang_ast.ast.nodes;
     import std.conv : to;
 
-    if (!visitor.precondition)
+    bool beginDispatch() @safe {
+        if (!visitor.precondition)
+            return false;
+        static if (__traits(hasMember, VisitorT, "enterCursor")) {
+            if (!visitor.enterCursor(cursor))
+                return false;
+        }
+        return true;
+    }
+
+    void endDispatch() @safe {
+        static if (__traits(hasMember, VisitorT, "leaveCursor")) {
+            visitor.leaveCursor(cursor);
+        }
+    }
+
+    if (!beginDispatch)
         return;
+    scope (exit)
+        endDispatch();
 
     static if (__traits(hasMember, VisitorT, "ignoreCursors")) {
         const h = cursor.toHash;

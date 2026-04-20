@@ -17,6 +17,8 @@ Fixes
    make it easier to maintain the configs.
  * Fixed a database deadlock in the mutate plugin. The bug made it impossible
    to use the mutation testing plugin on newer compilers.
+ * Fix mutate analyze never stopping when analyzing complex code such as
+   fmtlib.
 
 # v5.3 Chert
 

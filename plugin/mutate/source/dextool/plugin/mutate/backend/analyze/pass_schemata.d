@@ -174,6 +174,16 @@ class CodeMutantIndex {
         }
         return null;
     }
+
+    bool hasAnyIn(AbsolutePath file, Offset range) {
+        if (auto v = file in index) {
+            foreach (offset; v.byKey) {
+                if (range.begin <= offset.begin && offset.end <= range.end)
+                    return true;
+            }
+        }
+        return false;
+    }
 }
 
 /// Build a fragment for a schema.
@@ -339,6 +349,7 @@ class CppRootVisitor : DepthFirstVisitor {
     SchemataResult result;
     FilesysIO fio;
     SchemaQ sq;
+    Set!size_t seenFunctionBlocks;
 
     alias visit = DepthFirstVisitor.visit;
 
@@ -352,8 +363,33 @@ class CppRootVisitor : DepthFirstVisitor {
     }
 
     override void visit(Function n) @trusted {
+        auto firstBlock = {
+            foreach (c; n.children.filter!(a => a.kind == Kind.Block))
+                return c;
+            return null;
+        }();
+        if (firstBlock is null) {
+            accept(n, this);
+            return;
+        }
+
+        const loc = ast.location(firstBlock);
+        if (n.schemaBlacklist || firstBlock.schemaBlacklist) {
+            log.tracef("schema function skip blacklisted %s", loc);
+            return;
+        }
+
+        if (index.hasAnyIn(loc.file, loc.interval)) {
+            const key = loc.file.toHash ^ loc.interval.toHash;
+            if (key in seenFunctionBlocks)
+                return;
+            seenFunctionBlocks.add(key);
+        }
+
+        log.tracef("schema function begin %s", loc);
         scope funcVisitor = new CppSchemataVisitor(ast, index, sq, fio, result);
         funcVisitor.startVisit(n);
+        log.tracef("schema function end %s", loc);
         accept(n, this);
     }
 }
@@ -401,8 +437,12 @@ class CppSchemataVisitor : DepthFirstVisitor {
         }();
         if (firstBlock is null)
             return;
+        if (n.schemaBlacklist || firstBlock.schemaBlacklist)
+            return;
         auto loc = ast.location(firstBlock);
         if (loc.interval.isZero)
+            return;
+        if (!index.hasAnyIn(loc.file, loc.interval))
             return;
         fragmentRoot = loc;
 
