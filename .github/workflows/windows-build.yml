@@ -27,12 +27,26 @@ jobs:
         run: |
           $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/LLVM-${{ env.LLVM_VERSION }}-win64.exe"
           Invoke-WebRequest -Uri $url -OutFile "llvm-installer.exe"
-          Start-Process -FilePath ".\llvm-installer.exe" -Args "/S" -Wait
+          $llvmRoot = Join-Path $env:RUNNER_TEMP "llvm"
+          Remove-Item -Recurse -Force $llvmRoot -ErrorAction SilentlyContinue
+          $install = Start-Process -FilePath ".\llvm-installer.exe" -ArgumentList @("/S", "/D=$llvmRoot") -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "LLVM installer failed with exit code $($install.ExitCode)."
+          }
 
-          $llvmConfig = Get-ChildItem -Path "C:\Program Files" -Directory -Filter "LLVM*" |
-            ForEach-Object { Join-Path $_.FullName "bin\llvm-config.exe" } |
-            Where-Object { Test-Path $_ } |
-            Select-Object -First 1
+          $candidates = @(
+            (Join-Path $llvmRoot "bin\llvm-config.exe"),
+            "C:\Program Files\LLVM\bin\llvm-config.exe",
+            "C:\Program Files (x86)\LLVM\bin\llvm-config.exe",
+            (Join-Path $env:LOCALAPPDATA "Programs\LLVM\bin\llvm-config.exe")
+          )
+          $llvmConfig = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $llvmConfig) {
+            $searchRoots = @("C:\Program Files", "C:\Program Files (x86)", $env:LOCALAPPDATA, $env:RUNNER_TEMP) | Where-Object { $_ -and (Test-Path $_) }
+            $llvmConfig = $searchRoots |
+              ForEach-Object { Get-ChildItem -Path $_ -Filter "llvm-config.exe" -File -Recurse -ErrorAction SilentlyContinue } |
+              Select-Object -ExpandProperty FullName -First 1
+          }
           if (-not $llvmConfig) {
             throw "llvm-config.exe not found after LLVM install."
           }
