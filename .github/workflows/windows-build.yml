@@ -73,7 +73,7 @@ jobs:
 
       - name: Build bundled SQLite3
         run: |
-          cmake -B build-sqlite vendor\sqlite3 -DCMAKE_BUILD_TYPE=Release
+          cmake -B build-sqlite vendor\sqlite3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build build-sqlite --config Release
         shell: pwsh
 
