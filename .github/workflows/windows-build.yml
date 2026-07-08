@@ -7,6 +7,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   LLVM_VERSION: "22.1.0"
   LDC_VERSION: "1.42.0"
