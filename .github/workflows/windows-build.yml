@@ -28,7 +28,18 @@ jobs:
           $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/LLVM-${{ env.LLVM_VERSION }}-win64.exe"
           Invoke-WebRequest -Uri $url -OutFile "llvm-installer.exe"
           Start-Process -FilePath ".\llvm-installer.exe" -Args "/S" -Wait
-          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          $llvmConfig = Get-ChildItem -Path "C:\Program Files" -Directory -Filter "LLVM*" |
+            ForEach-Object { Join-Path $_.FullName "bin\llvm-config.exe" } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if (-not $llvmConfig) {
+            throw "llvm-config.exe not found after LLVM install."
+          }
+
+          $llvmBin = Split-Path -Parent $llvmConfig
+          $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "LLVM_CONFIG=$llvmConfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         shell: pwsh
 
       - name: Install LDC2 ${{ env.LDC_VERSION }}
@@ -41,7 +52,7 @@ jobs:
 
       - name: Verify tool versions
         run: |
-          llvm-config --version
+          & "$env:LLVM_CONFIG" --version
           ldc2 --version
           cmake --version
         shell: pwsh
