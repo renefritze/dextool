@@ -22,8 +22,11 @@ set(CMAKE_INCLUDE_FLAG_D "-I")
 
 if(WIN32)
     # On Windows the D compiler drives the MSVC linker itself. Raw linker
-    # flags must be passed prefixed with -L (dmd/ldmd2 syntax).
-    set(CMAKE_D_LINK_EXECUTABLE "<CMAKE_D_COMPILER> -of<TARGET> <CMAKE_D_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
+    # flags must be passed prefixed with -L (dmd/ldmd2 syntax). Note that
+    # <CMAKE_D_LINK_FLAGS> is intentionally left out because it contains
+    # bare MSVC flags such as /machine:x64 which ldmd2 would interpret as
+    # input files.
+    set(CMAKE_D_LINK_EXECUTABLE "<CMAKE_D_COMPILER> -of<TARGET> <LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
 else()
     # Flags from ExtractDMDSystemLinker.cmake
     list(APPEND _D_LINKERFLAG_LIST ${D_LINKER_ARGS})
