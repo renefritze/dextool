@@ -22,6 +22,17 @@ if(NOT LIBCLANG_LIB_PATH OR NOT LIBCLANG_LDFLAGS)
 endif()
 include(BuildD)
 
+if(WIN32)
+    # all executables are linked by the D compiler which does not understand
+    # the bare MSVC linker flags cmake defaults to (/machine:x64 etc) and
+    # would interpret them as input files. the D compiler passes the correct
+    # flags to the MSVC linker by itself. must be set after all
+    # enable_language calls because those re-initialize the cache values.
+    foreach(cfg "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL")
+        set(CMAKE_EXE_LINKER_FLAGS${cfg} "")
+    endforeach()
+endif()
+
 set(DEXTOOL_USE_MOLD "AUTO" CACHE STRING "Use mold linker: AUTO, ON, or OFF")
 set_property(CACHE DEXTOOL_USE_MOLD PROPERTY STRINGS AUTO ON OFF)
 
