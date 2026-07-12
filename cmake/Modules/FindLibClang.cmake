@@ -62,13 +62,16 @@ if(WIN32)
     string(REGEX REPLACE "[^0-9].*" "" llvm_version_patch "${llvm_version_patch}")
 
     # All clang and LLVM static libs. link.exe resolves symbols across the
-    # whole set so the order does not matter.
+    # whole set so the order does not matter. note: no [A-Z] style globs,
+    # cmake matches case-insensitively on Windows by lowercasing file names
+    # which makes upper case ranges never match.
     file(GLOB llvm_static_libs RELATIVE ${llvm_config_LIBDIR}
         ${llvm_config_LIBDIR}/LLVM*.lib
-        ${llvm_config_LIBDIR}/clang[A-Z]*.lib)
-    file(GLOB clang_static_libs ${llvm_config_LIBDIR}/clang[A-Z]*.lib)
+        ${llvm_config_LIBDIR}/clang*.lib)
+    list(REMOVE_ITEM llvm_static_libs "libclang.lib" "clang.lib")
+    file(GLOB clang_static_libs ${llvm_config_LIBDIR}/clangAST.lib)
     if(NOT clang_static_libs)
-        message(FATAL_ERROR "No clang static libraries (clangAST.lib etc) found in ${llvm_config_LIBDIR}. The clang extensions cannot link without them. See .github/workflows/windows-build.yml for how to build them.")
+        message(FATAL_ERROR "No clang static libraries (clangAST.lib etc) found in ${llvm_config_LIBDIR}. The clang extensions cannot link without them. Use a full LLVM distribution such as the official clang+llvm archive.")
     endif()
     set(llvm_libs_dmd)
     foreach(l ${llvm_static_libs})
