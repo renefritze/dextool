@@ -1,0 +1,124 @@
+name: Windows Build
+
+on:
+  pull_request:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LLVM_VERSION: "22.1.0"
+  LDC_VERSION: "1.42.0"
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # needed for git describe to embed the version
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\llvm
+          key: llvm-${{ env.LLVM_VERSION }}-x86_64-pc-windows-msvc
+
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          # The clang+llvm archive (unlike the LLVM-*-win64.exe installer)
+          # ships llvm-config.exe, the clang C++ headers and the static libs
+          # that dextool needs.
+          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}/clang+llvm-${{ env.LLVM_VERSION }}-x86_64-pc-windows-msvc.tar.xz"
+          Invoke-WebRequest -Uri $url -OutFile "llvm.tar.xz"
+          New-Item -ItemType Directory -Force -Path C:\llvm | Out-Null
+          tar -xf llvm.tar.xz -C C:\llvm --strip-components=1
+          Remove-Item llvm.tar.xz
+        shell: pwsh
+
+      - name: Add LLVM to PATH
+        run: |
+          if (-not (Test-Path "C:\llvm\bin\llvm-config.exe")) {
+            throw "llvm-config.exe not found in C:\llvm\bin"
+          }
+          "C:\llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Cache LDC
+        id: cache-ldc
+        uses: actions/cache@v4
+        with:
+          path: C:\ldc2
+          key: ldc2-${{ env.LDC_VERSION }}-windows-x64
+
+      - name: Install LDC2 ${{ env.LDC_VERSION }}
+        if: steps.cache-ldc.outputs.cache-hit != 'true'
+        run: |
+          $url = "https://github.com/ldc-developers/ldc/releases/download/v${{ env.LDC_VERSION }}/ldc2-${{ env.LDC_VERSION }}-windows-x64.7z"
+          Invoke-WebRequest -Uri $url -OutFile "ldc2.7z"
+          7z x ldc2.7z -oC:\ldc2
+          Remove-Item ldc2.7z
+        shell: pwsh
+
+      - name: Add LDC to PATH
+        run: |
+          "C:\ldc2\ldc2-${{ env.LDC_VERSION }}-windows-x64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Verify tool versions
+        run: |
+          llvm-config --version
+          llvm-config --libdir
+          ldmd2 --version
+          cmake --version
+          ninja --version
+        shell: pwsh
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_INSTALL_PREFIX=C:/dextool_install `
+            -DLOW_MEM=ON
+        shell: pwsh
+
+      - name: Build
+        # low parallelism to keep the peak memory of the D compiler within
+        # the runner's 16 GB when compiling dextool-mutate
+        run: cmake --build build -j 2
+        shell: pwsh
+
+      - name: Smoke test
+        run: |
+          & build\dextool.exe --version
+          & build\dextool.exe --plugin-list
+          & build\dextool.exe mutate --help
+        shell: pwsh
+
+      - name: Install
+        run: cmake --install build
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dextool-windows-x64
+          path: C:/dextool_install
