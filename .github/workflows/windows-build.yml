@@ -55,6 +55,62 @@ jobs:
           "C:\llvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         shell: pwsh
 
+      - name: Cache clang static libraries
+        id: cache-clang-libs
+        uses: actions/cache@v4
+        with:
+          path: C:\clang-libs
+          key: clang-libs-${{ env.LLVM_VERSION }}-x86_64-pc-windows-msvc-v1
+
+      - name: Setup MSVC environment (for clang libs build)
+        if: steps.cache-clang-libs.outputs.cache-hit != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build clang static libraries
+        if: steps.cache-clang-libs.outputs.cache-hit != 'true'
+        run: |
+          # The clang+llvm windows archive does not ship the clang C++ static
+          # libraries (clangAST.lib etc) that the dextool clang extensions
+          # need. Build just those libraries standalone against the prebuilt
+          # LLVM. The result is cached.
+          $base = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}"
+          Invoke-WebRequest -Uri "$base/clang-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile clang-src.tar.xz
+          Invoke-WebRequest -Uri "$base/cmake-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile cmake-src.tar.xz
+          Invoke-WebRequest -Uri "$base/third-party-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile third-party-src.tar.xz
+          New-Item -ItemType Directory -Force -Path C:\llvm-src | Out-Null
+          tar -xf clang-src.tar.xz -C C:\llvm-src
+          tar -xf cmake-src.tar.xz -C C:\llvm-src
+          tar -xf third-party-src.tar.xz -C C:\llvm-src
+          Rename-Item C:\llvm-src\clang-${{ env.LLVM_VERSION }}.src clang
+          Rename-Item C:\llvm-src\cmake-${{ env.LLVM_VERSION }}.src cmake
+          Rename-Item C:\llvm-src\third-party-${{ env.LLVM_VERSION }}.src third-party
+          Remove-Item clang-src.tar.xz, cmake-src.tar.xz, third-party-src.tar.xz
+
+          cmake -S C:\llvm-src\clang -B C:\llvm-src\build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DLLVM_ROOT=C:\llvm `
+            -DCLANG_INCLUDE_TESTS=OFF `
+            -DCLANG_INCLUDE_DOCS=OFF `
+            -DCLANG_ENABLE_ARCMT=OFF `
+            -DCLANG_ENABLE_STATIC_ANALYZER=OFF
+          if ($LASTEXITCODE -ne 0) { throw "clang configure failed" }
+          ninja -C C:\llvm-src\build clangAnalysis clangAST clangBasic clangLex
+          if ($LASTEXITCODE -ne 0) { throw "clang libs build failed" }
+
+          New-Item -ItemType Directory -Force -Path C:\clang-libs | Out-Null
+          Copy-Item C:\llvm-src\build\lib\clang*.lib C:\clang-libs\
+          Remove-Item -Recurse -Force C:\llvm-src
+        shell: pwsh
+
+      - name: Install clang static libraries
+        run: Copy-Item C:\clang-libs\clang*.lib C:\llvm\lib\
+        shell: pwsh
+
       - name: Cache LDC
         id: cache-ldc
         uses: actions/cache@v4
