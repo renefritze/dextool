@@ -66,6 +66,10 @@ if(WIN32)
     file(GLOB llvm_static_libs RELATIVE ${llvm_config_LIBDIR}
         ${llvm_config_LIBDIR}/LLVM*.lib
         ${llvm_config_LIBDIR}/clang[A-Z]*.lib)
+    file(GLOB clang_static_libs ${llvm_config_LIBDIR}/clang[A-Z]*.lib)
+    if(NOT clang_static_libs)
+        message(FATAL_ERROR "No clang static libraries (clangAST.lib etc) found in ${llvm_config_LIBDIR}. The clang extensions cannot link without them. See .github/workflows/windows-build.yml for how to build them.")
+    endif()
     set(llvm_libs_dmd)
     foreach(l ${llvm_static_libs})
         list(APPEND llvm_libs_dmd "-L${l}")

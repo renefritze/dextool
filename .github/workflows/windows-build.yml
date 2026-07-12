@@ -102,11 +102,23 @@ jobs:
 
           New-Item -ItemType Directory -Force -Path C:\clang-libs | Out-Null
           Copy-Item C:\llvm-src\build\lib\clang*.lib C:\clang-libs\
-          Remove-Item -Recurse -Force C:\llvm-src
+          $built = @(Get-ChildItem C:\clang-libs -Filter *.lib)
+          Write-Host "clang libs built: $($built.Name -join ', ')"
+          if ($built.Count -eq 0) {
+            Write-Host "contents of C:\llvm-src\build\lib:"
+            Get-ChildItem C:\llvm-src\build\lib | Select-Object -ExpandProperty Name
+            throw "no clang static libraries were produced"
+          }
         shell: pwsh
 
       - name: Install clang static libraries
-        run: Copy-Item C:\clang-libs\clang*.lib C:\llvm\lib\
+        run: |
+          Copy-Item C:\clang-libs\clang*.lib C:\llvm\lib\
+          $installed = @(Get-ChildItem C:\llvm\lib -Filter clang*.lib)
+          Write-Host "clang libs in C:\llvm\lib: $($installed.Name -join ', ')"
+          if ($installed.Count -eq 0) {
+            throw "clang static libraries missing from C:\llvm\lib"
+          }
         shell: pwsh
 
       - name: Cache LDC
