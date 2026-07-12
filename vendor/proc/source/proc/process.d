@@ -5,7 +5,13 @@ Author: Joakim Brännström (joakim.brannstrom@gmx.com)
 */
 module proc.process;
 
-import core.sys.posix.signal : SIGKILL;
+version (Posix) {
+    import core.sys.posix.signal : SIGKILL;
+} else {
+    // only used as a marker for "kill hard". on windows processes are always
+    // terminated via TerminateProcess.
+    enum SIGKILL = 9;
+}
 import core.thread : Thread;
 import core.time : dur, Duration;
 import logger = std.experimental.logger;
@@ -26,6 +32,16 @@ import std.stdio;
 public import proc.channel;
 public import proc.pid;
 
+/// The numeric process id of a std.process Pid.
+RawPid toRawPid(std.process.Pid p) nothrow @safe {
+    version (Windows) {
+        // osHandle is the process HANDLE on Windows, not the process id.
+        return RawPid(p.processID);
+    } else {
+        return p.osHandle.RawPid;
+    }
+}
+
 // public import proc.tty;
 
 version (unittest) {
@@ -34,7 +50,6 @@ version (unittest) {
 
 /// Async process wrapper for a std.process SpawnProcess
 struct SpawnProcess {
-    import core.sys.posix.signal : SIGKILL;
     import std.algorithm : among;
 
     private {
@@ -52,7 +67,7 @@ struct SpawnProcess {
 
     this(std.process.Pid process) @safe {
         this.process = process;
-        this.pid = process.osHandle.RawPid;
+        this.pid = toRawPid(process);
     }
 
     ~this() @safe {
@@ -162,7 +177,6 @@ struct SpawnProcess {
 /// Async process that do not block on read from stdin/stderr.
 struct PipeProcess {
     import std.algorithm : among;
-    import core.sys.posix.signal : SIGKILL;
 
     private {
         enum State {
@@ -206,7 +220,7 @@ struct PipeProcess {
 
     /// Returns: The raw OS handle for the process ID.
     RawPid osHandle() nothrow @safe {
-        return pid.osHandle.RawPid;
+        return toRawPid(pid);
     }
 
     /// Access to stdout.
@@ -378,19 +392,54 @@ PipeProcess pipeShell(scope const(char)[] command,
  * its children.
  */
 @safe struct Sandbox(ProcessT) {
-    import core.sys.posix.signal : SIGKILL;
-
     private {
         ProcessT p;
         RawPid pid;
+        version (Windows) {
+            import core.sys.windows.windef : HANDLE;
+
+            HANDLE job;
+        }
     }
 
-    this(ProcessT p) @safe {
-        import core.sys.posix.unistd : setpgid;
+    version (Posix) {
+        this(ProcessT p) @safe {
+            import core.sys.posix.unistd : setpgid;
 
-        this.p = p;
-        this.pid = p.osHandle;
-        setpgid(pid, 0);
+            this.p = p;
+            this.pid = p.osHandle;
+            setpgid(pid, 0);
+        }
+    } else version (Windows) {
+        this(ProcessT p) @trusted {
+            import core.sys.windows.winbase : CreateJobObjectA, SetInformationJobObject,
+                OpenProcess, CloseHandle, AssignProcessToJobObject;
+            import core.sys.windows.winnt : JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+                JOBOBJECTINFOCLASS, PROCESS_SET_QUOTA, PROCESS_TERMINATE;
+
+            // not all druntime versions declare these
+            enum uint jobObjectLimitKillOnJobClose = 0x2000;
+            enum jobObjectExtendedLimitInformation = cast(JOBOBJECTINFOCLASS) 9;
+
+            this.p = p;
+            this.pid = p.osHandle;
+
+            // a job object make it possible to kill the process and all of
+            // its children as one unit, similar to a process group on posix.
+            job = CreateJobObjectA(null, null);
+            if (job !is null) {
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+                info.BasicLimitInformation.LimitFlags = jobObjectLimitKillOnJobClose;
+                SetInformationJobObject(job, jobObjectExtendedLimitInformation,
+                        &info, info.sizeof);
+
+                auto h = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, cast(uint) pid.value);
+                if (h !is null) {
+                    AssignProcessToJobObject(job, h);
+                    CloseHandle(h);
+                }
+            }
+        }
     }
 
     RawPid osHandle() nothrow @safe {
@@ -415,10 +464,18 @@ PipeProcess pipeShell(scope const(char)[] command,
         }
     }
 
-    void dispose() scope @safe {
+    void dispose() scope @trusted {
         // this also reaps the children thus cleaning up zombies
         this.kill;
         p.dispose;
+        version (Windows) {
+            import core.sys.windows.winbase : CloseHandle;
+
+            if (job !is null) {
+                CloseHandle(job);
+                job = null;
+            }
+        }
     }
 
     /** Send `signal` to the process.
@@ -426,7 +483,15 @@ PipeProcess pipeShell(scope const(char)[] command,
      * Param:
      *  signal = a signal from `core.sys.posix.signal`
      */
-    void kill(int signal = SIGKILL) nothrow @safe {
+    void kill(int signal = SIGKILL) nothrow @trusted {
+        version (Windows) {
+            import core.sys.windows.winbase : TerminateJobObject;
+
+            if (job !is null) {
+                TerminateJobObject(job, cast(uint)-signal);
+            }
+        }
+
         // must first retrieve the submap because after the process is killed
         // its children may have changed.
         auto pmap = makePidMap.getSubMap(pid);
@@ -491,7 +556,6 @@ sleep 10m
 /** dispose the process after the timeout.
  */
 @safe struct Timeout(ProcessT) {
-    import core.sys.posix.signal : SIGKILL;
     import core.thread;
     import std.algorithm : among;
     import std.datetime : Clock, Duration;
@@ -607,12 +671,42 @@ sleep 10m
         }
     }
 
+    private static bool isProcessAlive(RawPid p) @trusted nothrow {
+        version (Posix) {
+            static import core.sys.posix.signal;
+
+            return core.sys.posix.signal.kill(p, 0) != -1;
+        } else version (Windows) {
+            import core.sys.windows.winbase : OpenProcess, CloseHandle,
+                WaitForSingleObject, WAIT_OBJECT_0;
+            import core.sys.windows.winnt : SYNCHRONIZE;
+
+            auto h = OpenProcess(SYNCHRONIZE, 0, cast(uint) p.value);
+            if (h is null) {
+                return false;
+            }
+            scope (exit)
+                CloseHandle(h);
+            return WaitForSingleObject(h, 0) != WAIT_OBJECT_0;
+        }
+    }
+
+    private static auto currTimeNothrow() nothrow @safe {
+        import std.datetime : SysTime;
+
+        // Clock.currTime is not nothrow on all platforms (Windows).
+        try {
+            return Clock.currTime;
+        } catch (Exception e) {
+        }
+        return SysTime.init;
+    }
+
     private static void checkProcess(RawPid p, Duration timeout, Background bg) nothrow {
         import std.algorithm : max, min;
         import std.variant : Variant;
-        static import core.sys.posix.signal;
 
-        const stopAt = Clock.currTime + timeout;
+        const stopAt = currTimeNothrow + timeout;
         // the purpose is to poll the process often "enough" that if it
         // terminates early `Process` detects it fast enough. 1000 is chosen
         // because it "feels good". the purpose
@@ -620,7 +714,7 @@ sleep 10m
 
         bool forceStop;
         bool running = true;
-        while (running && Clock.currTime < stopAt) {
+        while (running && currTimeNothrow < stopAt) {
             const msg = bg.popMsg;
 
             final switch (msg) {
@@ -636,18 +730,16 @@ sleep 10m
                 break;
             }
 
-            () @trusted {
-                if (core.sys.posix.signal.kill(p, 0) == -1) {
-                    running = false;
-                }
-            }();
+            if (!isProcessAlive(p)) {
+                running = false;
+            }
         }
 
         // may be children alive thus must ensure that the whole process tree
         // is killed if this is a sandbox with a timeout.
         bg.kill();
 
-        if (!forceStop && Clock.currTime >= stopAt) {
+        if (!forceStop && currTimeNothrow >= stopAt) {
             bg.setReply(Reply.killedByTimeout);
         } else {
             bg.setReply(Reply.normalDeath);
@@ -1099,18 +1191,32 @@ sleep 10m
     assert(postChildren == 0);
 }
 
-string makeScript(string script, string file = __FILE__, uint line = __LINE__) {
-    import core.sys.posix.sys.stat;
-    import std.file : getAttributes, setAttributes, thisExePath;
-    import std.stdio : File;
-    import std.path : baseName;
-    import std.conv : to;
+version (Posix) {
+    string makeScript(string script, string file = __FILE__, uint line = __LINE__) {
+        import core.sys.posix.sys.stat;
+        import std.file : getAttributes, setAttributes, thisExePath;
+        import std.stdio : File;
+        import std.path : baseName;
+        import std.conv : to;
 
-    immutable fname = thisExePath ~ "_" ~ file.baseName ~ line.to!string ~ ".sh";
+        immutable fname = thisExePath ~ "_" ~ file.baseName ~ line.to!string ~ ".sh";
 
-    File(fname, "w").writeln(script);
-    setAttributes(fname, getAttributes(fname) | S_IXUSR | S_IXGRP | S_IXOTH);
-    return fname;
+        File(fname, "w").writeln(script);
+        setAttributes(fname, getAttributes(fname) | S_IXUSR | S_IXGRP | S_IXOTH);
+        return fname;
+    }
+} else version (Windows) {
+    string makeScript(string script, string file = __FILE__, uint line = __LINE__) {
+        import std.file : thisExePath;
+        import std.stdio : File;
+        import std.path : baseName;
+        import std.conv : to;
+
+        immutable fname = thisExePath ~ "_" ~ file.baseName ~ line.to!string ~ ".bat";
+
+        File(fname, "w").writeln(script);
+        return fname;
+    }
 }
 
 /// Wait for p to have num children or fail after 10s.

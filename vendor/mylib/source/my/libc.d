@@ -7,6 +7,19 @@ A variaty of libc bindings.
 */
 module my.libc;
 
+version (Windows) {
+    // stubs. these glibc functions do not exist on Windows. the fallback
+    // behavior of the callers when the return value signals a failure is
+    // appropriate.
+    int malloc_trim(size_t pad) @nogc nothrow @system {
+        return 0;
+    }
+
+    int getloadavg(double* loadavg, int nelem) @nogc nothrow @system {
+        return -1;
+    }
+} else {
+
 // malloc_trim - release free memory from the heap
 extern (C) int malloc_trim(size_t pad) @nogc nothrow @system;
 
@@ -26,3 +39,5 @@ DIAGNOSTICS
      ber of samples actually retrieved is returned.
  */
 extern (C) int getloadavg(double* loadavg, int nelem) @nogc nothrow @system;
+
+}

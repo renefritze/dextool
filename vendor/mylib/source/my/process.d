@@ -5,6 +5,9 @@ Author: Joakim Brännström (joakim.brannstrom@gmx.com)
 */
 module my.process;
 
+// only supported on Posix
+version (Posix):
+
 import std.process : spawnProcess, Config;
 
 /** Spawn `args` as a daemon.

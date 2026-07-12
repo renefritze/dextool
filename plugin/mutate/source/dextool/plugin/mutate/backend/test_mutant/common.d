@@ -326,12 +326,14 @@ bool externalProgram(ShellCommand cmd, DrainElement[] output,
         auto stderr = File(stderrPath, "w");
 
         foreach (a; output) {
+            // trusted: on Windows rawWrite is @system (temporary CRT mode
+            // switch of the file descriptor).
             final switch (a.type) {
             case DrainElement.Type.stdout:
-                stdout.rawWrite(a.data);
+                () @trusted { stdout.rawWrite(a.data); }();
                 break;
             case DrainElement.Type.stderr:
-                stderr.rawWrite(a.data);
+                () @trusted { stderr.rawWrite(a.data); }();
                 break;
             }
         }
@@ -437,12 +439,12 @@ CompileResult compile(ShellCommand cmd, Duration timeout, PrintCompileOnFailure 
     if (cmd.value.empty)
         return CompileResult(false);
 
-    const auto started = Clock.currTime;
+    const auto started = currTimeNothrow;
     // every minute print something to indicate that the process is still
     // alive. Otherwise e.g. Jenkins may determine that it is dead.
-    auto nextTick = Clock.currTime + 1.dur!"minutes";
+    auto nextTick = currTimeNothrow + 1.dur!"minutes";
     void tick() {
-        const now = Clock.currTime;
+        const now = currTimeNothrow;
         if (now > nextTick) {
             nextTick = now + 1.dur!"minutes";
             writeln("compiling... ", now - started);
@@ -617,7 +619,7 @@ struct TestStopCheck {
     }
 
     bool isMaxRuntime() @safe nothrow const {
-        return Clock.currTime > stopAt;
+        return currTimeNothrow > stopAt;
     }
 
     private double[3] load() nothrow const @nogc @trusted {
@@ -661,10 +663,10 @@ struct TestStopCheck {
         static void tick(Duration waitFor) @trusted nothrow {
             import core.stdc.stdlib : exit;
 
-            const stopAt = Clock.currTime + waitFor;
+            const stopAt = currTimeNothrow + waitFor;
             bool parentAlive = true;
 
-            while (parentAlive && Clock.currTime < stopAt) {
+            while (parentAlive && currTimeNothrow < stopAt) {
                 try {
                     receiveTimeout(10.dur!"seconds", (int) {});
                 } catch (LinkTerminated) {
@@ -741,4 +743,15 @@ struct TestBinaryDb {
     bool empty() @safe pure nothrow const @nogc {
         return original.empty && mutated.empty;
     }
+}
+
+/// Clock.currTime that is nothrow on all platforms (it is not on Windows).
+package(dextool.plugin.mutate) auto currTimeNothrow() @safe nothrow {
+    import std.datetime.systime : Clock, SysTime;
+
+    try {
+        return Clock.currTime;
+    } catch (Exception e) {
+    }
+    return SysTime.init;
 }

@@ -16,14 +16,27 @@ import std.path;
 import std.range : iota;
 import std.stdio : File, writeln, writefln;
 import std.typecons : Nullable, NullableRef, Tuple, tuple, Flag;
-import core.sys.posix.sys.types : uid_t;
 
-static import core.sys.posix.signal;
+version (Posix) {
+    import core.sys.posix.sys.types : uid_t;
+
+    static import core.sys.posix.signal;
+
+    private enum defaultKillSignal = core.sys.posix.signal.SIGKILL;
+} else version (Windows) {
+    alias uid_t = uint;
+
+    private enum defaultKillSignal = 9;
+}
 
 @safe:
 
 struct RawPid {
-    import core.sys.posix.unistd : pid_t;
+    version (Posix) {
+        import core.sys.posix.unistd : pid_t;
+    } else {
+        alias pid_t = int;
+    }
 
     pid_t value;
     alias value this;
@@ -227,10 +240,23 @@ struct PidMap {
  *
  * TODO: remove @trusted when upgrading the minimum compiler >2.091.0
  */
-RawPid[] kill(PidMap pmap, Flag!"onlyCurrentUser" user, int signal = core.sys.posix.signal.SIGKILL) @trusted nothrow {
+RawPid[] kill(PidMap pmap, Flag!"onlyCurrentUser" user, int signal = defaultKillSignal) @trusted nothrow {
     static void killMap(RawPid[] pids, int signal) @trusted nothrow {
         foreach (const c; pids) {
-            core.sys.posix.signal.kill(c, signal);
+            version (Posix) {
+                core.sys.posix.signal.kill(c, signal);
+            } else version (Windows) {
+                import core.sys.windows.winbase : OpenProcess, TerminateProcess, CloseHandle;
+                import core.sys.windows.winnt : PROCESS_TERMINATE;
+
+                auto h = OpenProcess(PROCESS_TERMINATE, 0, cast(uint) c.value);
+                if (h !is null) {
+                    // mimic the exit code of a SIGKILL:ed process on posix
+                    // (as observed through std.process.wait).
+                    TerminateProcess(h, cast(uint)-signal);
+                    CloseHandle(h);
+                }
+            }
         }
     }
 
@@ -262,11 +288,14 @@ RawPid[] kill(PidMap pmap, Flag!"onlyCurrentUser" user, int signal = core.sys.po
 
 /// Reap all pids by calling wait on them.
 void reap(RawPid[] pids) @trusted nothrow {
-    import core.sys.posix.sys.wait : waitpid, WNOHANG;
+    version (Posix) {
+        import core.sys.posix.sys.wait : waitpid, WNOHANG;
 
-    foreach (c; pids) {
-        waitpid(c, null, WNOHANG);
+        foreach (c; pids) {
+            waitpid(c, null, WNOHANG);
+        }
     }
+    // on Windows there are no zombie processes to reap.
 }
 
 /// Pretty format `PidMap` as a tree
@@ -286,25 +315,29 @@ void toTreeString(Writer)(PidMap pmap, ref Writer w) {
     immutable indentIncr = 2;
 
     static string username(uid_t uid) @trusted {
-        import core.sys.posix.pwd;
-        import core.sys.posix.unistd;
-        import std.string : fromStringz;
+        version (Posix) {
+            import core.sys.posix.pwd;
+            import core.sys.posix.unistd;
+            import std.string : fromStringz;
 
-        const bufSize = () {
-            const v = sysconf(_SC_GETPW_R_SIZE_MAX);
-            if (v == -1)
-                return 16384;
-            return v;
-        }();
-        auto buf = new char[bufSize];
-        passwd pwd;
-        passwd* result;
-        auto s = getpwuid_r(uid, &pwd, buf.ptr, cast(ulong) bufSize, &result);
+            const bufSize = () {
+                const v = sysconf(_SC_GETPW_R_SIZE_MAX);
+                if (v == -1)
+                    return 16384;
+                return v;
+            }();
+            auto buf = new char[bufSize];
+            passwd pwd;
+            passwd* result;
+            auto s = getpwuid_r(uid, &pwd, buf.ptr, cast(ulong) bufSize, &result);
 
-        if (result is null) {
+            if (result is null) {
+                return null;
+            }
+            return pwd.pw_name.fromStringz.idup;
+        } else {
             return null;
         }
-        return pwd.pw_name.fromStringz.idup;
     }
 
     void printMap(PidMap pmap, RawPid root, uint indentNr) {
@@ -386,7 +419,40 @@ Tuple!(PidMap, "map", RawPid, "root")[] splitToSubMaps(PidMap pmap) {
     return app.data;
 }
 
-PidMap makePidMap() @trusted nothrow {
+version (Windows) {
+    PidMap makePidMap() @trusted nothrow {
+        import core.sys.windows.tlhelp32 : CreateToolhelp32Snapshot, Process32First,
+            Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS;
+        import core.sys.windows.winbase : CloseHandle, INVALID_HANDLE_VALUE;
+
+        PidMap rval;
+        auto snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) {
+            return rval;
+        }
+        scope (exit)
+            CloseHandle(snap);
+
+        PROCESSENTRY32 pe;
+        pe.dwSize = PROCESSENTRY32.sizeof;
+        if (Process32First(snap, &pe)) {
+            do {
+                try {
+                    const pid = RawPid(cast(int) pe.th32ProcessID);
+                    const parent = RawPid(cast(int) pe.th32ParentProcessID);
+                    rval.put(PidMap.Pid(pid, PidMap.Stat(0), null, parent, null));
+                    rval.putChild(parent, pid);
+                } catch (Exception e) {
+                    logger.trace(e.msg).collectException;
+                }
+            }
+            while (Process32Next(snap, &pe));
+        }
+
+        return rval;
+    }
+} else {
+    PidMap makePidMap() @trusted nothrow {
     import std.algorithm : startsWith;
     import std.conv : to;
     import std.path : buildPath, baseName;
@@ -436,6 +502,7 @@ PidMap makePidMap() @trusted nothrow {
     }
 
     return rval;
+    }
 }
 
 /// Returns: a `PidMap` that only contains those processes that are owned by `uid`.
@@ -456,13 +523,52 @@ PidMap filterBy(PidMap pmap, const uid_t uid) nothrow {
 }
 
 PidMap filterByCurrentUser(PidMap pmap) nothrow {
-    import core.sys.posix.unistd : getuid;
+    version (Posix) {
+        import core.sys.posix.unistd : getuid;
 
-    return filterBy(pmap, getuid());
+        return filterBy(pmap, getuid());
+    } else {
+        // makePidMap on Windows do not track process owners. the process
+        // level access control when opening a process for termination
+        // protects from killing processes owned by other users.
+        return pmap;
+    }
 }
 
-/// Update the executable of all pids in the map
-void updateProc(ref PidMap pmap) @trusted nothrow {
+version (Windows) {
+    /// Update the executable of all pids in the map
+    void updateProc(ref PidMap pmap) @trusted nothrow {
+        import core.sys.windows.tlhelp32 : CreateToolhelp32Snapshot, Process32First,
+            Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS;
+        import core.sys.windows.winbase : CloseHandle, INVALID_HANDLE_VALUE;
+        import std.string : fromStringz;
+
+        auto snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) {
+            return;
+        }
+        scope (exit)
+            CloseHandle(snap);
+
+        PROCESSENTRY32 pe;
+        pe.dwSize = PROCESSENTRY32.sizeof;
+        if (Process32First(snap, &pe)) {
+            do {
+                const pid = RawPid(cast(int) pe.th32ProcessID);
+                try {
+                    if (pid in pmap.stat) {
+                        pmap.proc[pid] = pe.szExeFile.ptr.fromStringz.to!string;
+                    }
+                } catch (Exception e) {
+                    logger.trace(e.msg).collectException;
+                }
+            }
+            while (Process32Next(snap, &pe));
+        }
+    }
+} else {
+    /// Update the executable of all pids in the map
+    void updateProc(ref PidMap pmap) @trusted nothrow {
     static string parseCmdline(string pid) @trusted {
         import std.utf : byUTF;
 
@@ -487,6 +593,7 @@ void updateProc(ref PidMap pmap) @trusted nothrow {
         } catch (Exception e) {
             logger.trace(e.msg).collectException;
         }
+    }
     }
 }
 

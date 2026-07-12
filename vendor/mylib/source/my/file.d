@@ -43,17 +43,28 @@ import my.optional;
  * Returns: true on success and thus `attributes` contains a valid value.
  */
 bool getAttrs(const Path file, ref uint attributes) @safe nothrow {
-    import core.sys.posix.sys.stat : stat, stat_t;
-    import my.cstring;
+    version (Posix) {
+        import core.sys.posix.sys.stat : stat, stat_t;
+        import my.cstring;
 
-    static bool trustedAttrs(const Path file, ref stat_t st) @trusted {
-        return stat(file.toString.tempCString, &st) == 0;
+        static bool trustedAttrs(const Path file, ref stat_t st) @trusted {
+            return stat(file.toString.tempCString, &st) == 0;
+        }
+
+        stat_t st;
+        bool status = trustedAttrs(file, st);
+        attributes = st.st_mode;
+        return status;
+    } else {
+        import std.file : getAttributes;
+
+        try {
+            attributes = getAttributes(file.toString);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
-
-    stat_t st;
-    bool status = trustedAttrs(file, st);
-    attributes = st.st_mode;
-    return status;
 }
 
 /** A `nothrow` version of `getLinkAttributes` in Phobos.
@@ -61,26 +72,48 @@ bool getAttrs(const Path file, ref uint attributes) @safe nothrow {
  * Returns: true on success and thus `attributes` contains a valid value.
  */
 bool getLinkAttrs(const Path file, ref uint attributes) @safe nothrow {
-    import core.sys.posix.sys.stat : lstat, stat_t;
-    import my.cstring;
+    version (Posix) {
+        import core.sys.posix.sys.stat : lstat, stat_t;
+        import my.cstring;
 
-    static bool trustedAttrs(const Path file, ref stat_t st) @trusted {
-        return lstat(file.toString.tempCString, &st) == 0;
+        static bool trustedAttrs(const Path file, ref stat_t st) @trusted {
+            return lstat(file.toString.tempCString, &st) == 0;
+        }
+
+        stat_t st;
+        bool status = trustedAttrs(file, st);
+        attributes = st.st_mode;
+        return status;
+    } else {
+        import std.file : getLinkAttributes;
+
+        try {
+            attributes = getLinkAttributes(file.toString);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
-
-    stat_t st;
-    bool status = trustedAttrs(file, st);
-    attributes = st.st_mode;
-    return status;
 }
 
 /** A `nothrow` version of `setAttributes` in Phobos.
  */
 bool setAttrs(const Path file, const uint attributes) @trusted nothrow {
-    import core.sys.posix.sys.stat : chmod;
-    import my.cstring;
+    version (Posix) {
+        import core.sys.posix.sys.stat : chmod;
+        import my.cstring;
 
-    return chmod(file.toString.tempCString, attributes) == 0;
+        return chmod(file.toString.tempCString, attributes) == 0;
+    } else {
+        import std.file : setAttributes;
+
+        try {
+            setAttributes(file.toString, attributes);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
 
 /// Returns: true if `file` exists.
@@ -166,25 +199,44 @@ void copyRecurse(Path src, Path dst) {
 
 /// Make a file executable by all users on the system.
 void setExecutable(Path p) nothrow {
-    import core.sys.posix.sys.stat;
-    import std.file : getAttributes, setAttributes;
+    version (Posix) {
+        import core.sys.posix.sys.stat;
+        import std.file : getAttributes, setAttributes;
 
-    uint attrs;
-    if (getAttrs(p, attrs)) {
-        setAttrs(p, attrs | S_IXUSR | S_IXGRP | S_IXOTH);
+        uint attrs;
+        if (getAttrs(p, attrs)) {
+            setAttrs(p, attrs | S_IXUSR | S_IXGRP | S_IXOTH);
+        }
     }
+    // no execute bit on Windows. what makes a file executable is its
+    // extension.
 }
 
 /// Check if a file is executable.
 bool isExecutable(Path p) nothrow {
-    import core.sys.posix.sys.stat;
-    import std.file : getAttributes;
+    version (Posix) {
+        import core.sys.posix.sys.stat;
+        import std.file : getAttributes;
 
-    uint attrs;
-    if (getAttrs(p, attrs)) {
-        return (attrs & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0;
+        uint attrs;
+        if (getAttrs(p, attrs)) {
+            return (attrs & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0;
+        }
+        return false;
+    } else {
+        import std.algorithm : among;
+        import std.path : extension;
+        import std.string : toLower;
+        import std.exception : collectException;
+
+        string ext;
+        try {
+            ext = p.toString.extension.toLower;
+        } catch (Exception e) {
+            return false;
+        }
+        return ext.among(".exe", ".bat", ".cmd", ".com") != 0;
     }
-    return false;
 }
 
 /** As the unix command `which` it searches in `dirs` for an executable `name`.
@@ -230,10 +282,11 @@ unittest {
 
 AbsolutePath[] whichFromEnv(string envKey, string name) {
     import std.algorithm : splitter, map, filter;
+    import std.path : pathSeparator;
     import std.process : environment;
     import std.array : empty, array;
 
-    auto dirs = environment.get(envKey, null).splitter(":").filter!(a => !a.empty)
+    auto dirs = environment.get(envKey, null).splitter(pathSeparator).filter!(a => !a.empty)
         .map!(a => Path(a))
         .array;
     return which(dirs, name);
@@ -249,19 +302,24 @@ unittest {
  * Max depth guard against recursions or self referencing symlinks.
  */
 Optional!Path followSymlink(Path p, int maxDepth = 100) @safe nothrow {
-    import std.file : readLink;
+    version (Posix) {
+        import std.file : readLink;
 
-    try {
-        int depth;
-        for (; depth < maxDepth && existsAnd!isSymlink(p); ++depth) {
-            p = Path(buildPath(p.dirName, readLink(p.toString)));
+        try {
+            int depth;
+            for (; depth < maxDepth && existsAnd!isSymlink(p); ++depth) {
+                p = Path(buildPath(p.dirName, readLink(p.toString)));
+            }
+            if (depth < maxDepth)
+                return some(p);
+        } catch (Exception e) {
         }
-        if (depth < maxDepth)
-            return some(p);
-    } catch (Exception e) {
-    }
 
-    return none!Path;
+        return none!Path;
+    } else {
+        // symlinks are rarely used on Windows and readLink is not available.
+        return some(p);
+    }
 }
 
 @("shall not infinite loop over a self referencing symlink")
