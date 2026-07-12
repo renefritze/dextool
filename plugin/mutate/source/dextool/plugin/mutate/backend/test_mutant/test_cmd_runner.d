@@ -327,7 +327,6 @@ struct TestResult {
 
 /// Finds all executables in a directory tree.
 string[] findExecutables(AbsolutePath root, SpanMode mode = SpanMode.breadth) @trusted {
-    import core.sys.posix.sys.stat;
     import std.file : getAttributes;
     import std.file : dirEntries;
     import my.file : isExecutable;
@@ -448,7 +447,7 @@ struct RunResult {
     DrainElement[] output;
 }
 
-string makeUnittestScript(string script, string file = __FILE__, uint line = __LINE__) {
+version (Posix) string makeUnittestScript(string script, string file = __FILE__, uint line = __LINE__) {
     import core.sys.posix.sys.stat;
     import std.file : getAttributes, setAttributes, thisExePath;
     import std.stdio : File;
@@ -613,17 +612,26 @@ struct AvailableMem {
     SysTime nextPoll;
     long current = long.max;
 
+    static SysTime currTimeNothrow() @safe nothrow {
+        // Clock.currTime is not nothrow on all platforms (Windows).
+        try {
+            return Clock.currTime;
+        } catch (Exception e) {
+        }
+        return SysTime.init;
+    }
+
     static AvailableMem* make() @safe nothrow {
         try {
             return new AvailableMem(File("/proc/meminfo"), Clock.currTime);
         } catch (Exception e) {
             logger.warning("Unable to open /proc/meminfo").collectException;
         }
-        return new AvailableMem(File.init, Clock.currTime);
+        return new AvailableMem(File.init, currTimeNothrow);
     }
 
     long available() @trusted nothrow {
-        if (Clock.currTime > nextPoll && procMem.isOpen) {
+        if (currTimeNothrow > nextPoll && procMem.isOpen) {
             try {
                 procMem.rewind;
                 procMem.flush;
@@ -637,7 +645,7 @@ struct AvailableMem {
             } catch (Exception e) {
                 current = long.max;
             }
-            nextPoll = Clock.currTime + pollFreq;
+            nextPoll = currTimeNothrow + pollFreq;
         }
 
         return current;

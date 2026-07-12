@@ -1,7 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake" "${CMAKE_SOURCE_DIR}/cmake/Modules")
 
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(dextool)
+
+if(WIN32)
+    # ldc links druntime/phobos against the static CRT (libcmt), as do the
+    # official LLVM binary releases. Match that in all C/C++ code to avoid
+    # mixing CRTs in the final link.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 enable_language(D)
 
 include(common)
@@ -9,6 +21,17 @@ if(NOT LIBCLANG_LIB_PATH OR NOT LIBCLANG_LDFLAGS)
     include(FindLibClang)
 endif()
 include(BuildD)
+
+if(WIN32)
+    # all executables are linked by the D compiler which does not understand
+    # the bare MSVC linker flags cmake defaults to (/machine:x64 etc) and
+    # would interpret them as input files. the D compiler passes the correct
+    # flags to the MSVC linker by itself. must be set after all
+    # enable_language calls because those re-initialize the cache values.
+    foreach(cfg "" "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL")
+        set(CMAKE_EXE_LINKER_FLAGS${cfg} "")
+    endforeach()
+endif()
 
 set(DEXTOOL_USE_MOLD "AUTO" CACHE STRING "Use mold linker: AUTO, ON, or OFF")
 set_property(CACHE DEXTOOL_USE_MOLD PROPERTY STRINGS AUTO ON OFF)
@@ -37,8 +60,12 @@ endif()
 # Tool preparation
 #
 execute_process(
-    COMMAND ${D_COMPILER} ${CMAKE_SOURCE_DIR}/tools/symlink.d -of${CMAKE_BINARY_DIR}/symlink
+    COMMAND ${D_COMPILER} ${CMAKE_SOURCE_DIR}/tools/symlink.d -of${CMAKE_BINARY_DIR}/symlink${CMAKE_EXECUTABLE_SUFFIX}
+    RESULT_VARIABLE symlink_tool_status
 )
+if(symlink_tool_status)
+    message(FATAL_ERROR "Failed to build the symlink helper tool from tools/symlink.d")
+endif()
 
 #
 # Main configuration.
@@ -151,10 +178,25 @@ string(STRIP "${DDMD_DFLAGS}" DDMD_DFLAGS)
 set(DEXTOOL_EMBEDDED_VERSION_PATH ${PROJECT_BINARY_DIR}/resources/version.txt)
 
 # Generate the version description
-execute_process(
-    COMMAND ${PROJECT_SOURCE_DIR}/tools/gen_version_from_git.sh
-    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-)
+if(UNIX)
+    execute_process(
+        COMMAND ${PROJECT_SOURCE_DIR}/tools/gen_version_from_git.sh
+        WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+    )
+else()
+    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/resources)
+    execute_process(
+        COMMAND git describe --tags
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        OUTPUT_VARIABLE DEXTOOL_GIT_VERSION
+        RESULT_VARIABLE DEXTOOL_GIT_VERSION_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(DEXTOOL_GIT_VERSION_STATUS)
+        set(DEXTOOL_GIT_VERSION "unknown build")
+    endif()
+    file(WRITE ${DEXTOOL_EMBEDDED_VERSION_PATH} "${DEXTOOL_GIT_VERSION}\n")
+endif()
 
 add_custom_target(dextool_embedded_version
     DEPENDS

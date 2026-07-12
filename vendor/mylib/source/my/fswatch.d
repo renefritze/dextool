@@ -36,6 +36,9 @@ while (true) {
 */
 module my.fswatch;
 
+// only supported on linux
+version (linux):
+
 import core.sys.linux.errno : errno;
 import core.sys.linux.fcntl : fcntl, F_SETFD, FD_CLOEXEC;
 import core.sys.linux.sys.inotify : inotify_rm_watch, inotify_init1, inotify_add_watch, inotify_event, IN_CLOEXEC,

@@ -37,7 +37,12 @@ struct Timers {
         if (empty) {
             return defaultSleep;
         }
-        return max(Duration.zero, timers.front.expire - Clock.currTime);
+        try {
+            // Clock.currTime is not nothrow on all platforms (Windows).
+            return max(Duration.zero, timers.front.expire - Clock.currTime);
+        } catch (Exception e) {
+            return defaultSleep;
+        }
     }
 
     /// Sleep until the next action triggers.

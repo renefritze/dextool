@@ -13,8 +13,13 @@ set(dextool_cpp_clang_extension_SRC
 )
 
 add_library(dextool_cpp_clang_extension STATIC ${dextool_cpp_clang_extension_SRC})
+if(WIN32)
+    set(dextool_cpp_clang_extension_OPT_FLAGS "/O2")
+else()
+    set(dextool_cpp_clang_extension_OPT_FLAGS "-O2 -g")
+endif()
 set_target_properties(dextool_cpp_clang_extension PROPERTIES
-    COMPILE_FLAGS "${LIBLLVM_CXX_FLAGS} -O2 -g -I${CMAKE_CURRENT_LIST_DIR}/cpp_source -I${LIBLLVM_MAJOR_VERSION_INC}"
+    COMPILE_FLAGS "${LIBLLVM_CXX_FLAGS} ${dextool_cpp_clang_extension_OPT_FLAGS} -I${CMAKE_CURRENT_LIST_DIR}/cpp_source -I${LIBLLVM_MAJOR_VERSION_INC}"
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
     )

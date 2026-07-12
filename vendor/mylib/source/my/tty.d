@@ -7,6 +7,9 @@ Module to manipulate a file descriptor that point to a tty.
 */
 module my.tty;
 
+// only supported on Posix
+version (Posix):
+
 import my.from_;
 
 /// Used to reset the terminal to the original mode.

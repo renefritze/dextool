@@ -17,7 +17,11 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     # prefer DMD for debug builds because they are faster and normmally used by developers
     set(COMMON_D_COMPILERS "dmd" "ldmd2" "gdmd")
 endif()
-string(REPLACE ":" " " ENV_PATHS "$ENV{PATH}")
+if(WIN32)
+    set(ENV_PATHS "$ENV{PATH}")
+else()
+    string(REPLACE ":" " " ENV_PATHS "$ENV{PATH}")
+endif()
 # prefer compilers from the users PATH before system installs
 set(COMMON_D_COMPILER_PATHS ${ENV_PATHS} "/usr/bin" "/usr/local/bin" "C:\\d\\dmd2\\windows\\bin")
 
@@ -72,8 +76,11 @@ if (D_COMPILER)
     string(REGEX MATCH "^[^\r\n:]*" D_COMPILER_VERSION_STRING "${D_COMPILER_VERSION_STRING}")
 endif()
 
-# TODO: this only works on unix
-include(ExtractDMDSystemLinker)
+# The linker extraction parses gcc verbose output and thus only works on
+# unix. On Windows the D compiler drives the linker itself.
+if(UNIX)
+    include(ExtractDMDSystemLinker)
+endif()
 if ("${D_LINKER_COMMAND}" STREQUAL "")
     set(D_LINKER_COMMAND "${D_COMPILER}" CACHE STRING "D linker program")
     set(D_LINKER_ARGS "" CACHE STRING "D linker arguments")

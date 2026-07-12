@@ -160,7 +160,11 @@ final class FrontendIO : FilesysIO {
     }
 
     override File getDevNull() const scope {
-        return File("/dev/null", "w");
+        version (Windows) {
+            return File("NUL", "w");
+        } else {
+            return File("/dev/null", "w");
+        }
     }
 
     override File getStdin() @trusted const scope {
@@ -213,8 +217,11 @@ final class FrontendIO : FilesysIO {
             // because a Blob/SafeOutput could theoretically be created via
             // other means than a FilesysIO.
             // TODO fix so this validate is not needed.
-            if (!dryRun && verifyPathInsideRoot(root, fname, dryRun))
-                File(fname, "w").rawWrite(data);
+            if (!dryRun && verifyPathInsideRoot(root, fname, dryRun)) {
+                // trusted: on Windows rawWrite is @system (temporary CRT mode
+                // switch of the file descriptor).
+                () @trusted { File(fname, "w").rawWrite(data); }();
+            }
         }
     }
 

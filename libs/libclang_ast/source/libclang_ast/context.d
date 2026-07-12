@@ -139,6 +139,9 @@ CXUnsavedFile[] toClangFiles(ref BlobVfs vfs) @trusted {
     return vfs.uris.map!((a) {
         auto s = vfs.get(a).content[];
         auto fname = (cast(string) a).toStringz;
-        return CXUnsavedFile(fname, cast(char*) s.ptr, s.length);
+        // the cast is needed because the C type of Length is unsigned long
+        // which is 32-bit on Windows.
+        return CXUnsavedFile(fname, cast(char*) s.ptr,
+            cast(typeof(CXUnsavedFile.init.Length)) s.length);
     }).array();
 }

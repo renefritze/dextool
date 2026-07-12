@@ -20,16 +20,25 @@ set(CMAKE_INCLUDE_FLAG_D "-I")
 #set(CMAKE_AR "ar")
         #COMMAND ${D_COMPILER} -of${output_o} ${d_flags} -c ${input_d}
 
-# Flags from ExtractDMDSystemLinker.cmake
-list(APPEND _D_LINKERFLAG_LIST ${D_LINKER_ARGS})
-if(NOT "${CMAKE_EXE_LINKER_FLAGS}" STREQUAL "")
-    separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
-    list(APPEND _D_LINKERFLAG_LIST ${flags})
-endif()
-string(REPLACE ";" " " _D_LINKERFLAG_LIST "${_D_LINKERFLAG_LIST}")
+if(WIN32)
+    # On Windows the D compiler drives the MSVC linker itself. Raw linker
+    # flags must be passed prefixed with -L (dmd/ldmd2 syntax). Note that
+    # <CMAKE_D_LINK_FLAGS> is intentionally left out because it contains
+    # bare MSVC flags such as /machine:x64 which ldmd2 would interpret as
+    # input files.
+    set(CMAKE_D_LINK_EXECUTABLE "<CMAKE_D_COMPILER> -of<TARGET> <LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES>")
+else()
+    # Flags from ExtractDMDSystemLinker.cmake
+    list(APPEND _D_LINKERFLAG_LIST ${D_LINKER_ARGS})
+    if(NOT "${CMAKE_EXE_LINKER_FLAGS}" STREQUAL "")
+        separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
+        list(APPEND _D_LINKERFLAG_LIST ${flags})
+    endif()
+    string(REPLACE ";" " " _D_LINKERFLAG_LIST "${_D_LINKERFLAG_LIST}")
 
-# Link object files to an executable
-set(CMAKE_D_LINK_EXECUTABLE "${D_LINKER_COMMAND} -o<TARGET> <CMAKE_D_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES> ${_D_LINKERFLAG_LIST}")
+    # Link object files to an executable
+    set(CMAKE_D_LINK_EXECUTABLE "${D_LINKER_COMMAND} -o<TARGET> <CMAKE_D_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> <LINK_LIBRARIES> ${_D_LINKERFLAG_LIST}")
+endif()
 
 # -lib. create static library
 set(CMAKE_D_CREATE_STATIC_LIBRARY "<CMAKE_D_COMPILER> -lib -of<TARGET> <OBJECTS>")

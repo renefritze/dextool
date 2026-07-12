@@ -152,7 +152,7 @@ function(compile_d_integration_test name input_d compiler_args linker_args libs 
     # which in turn is dependent on the executable
     add_custom_command(OUTPUT "${target_name}.stamp"
         COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure $ENV{ARGSV} -R "${target_name}_"
-        COMMAND touch ${target_name}.stamp
+        COMMAND ${CMAKE_COMMAND} -E touch ${target_name}.stamp
         DEPENDS ${target_name} ${name} "${testdata_files}"
         COMMENT "Running test ${target_name}"
         )

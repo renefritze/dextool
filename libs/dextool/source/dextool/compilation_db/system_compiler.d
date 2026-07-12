@@ -83,7 +83,11 @@ SystemIncludePath[] deduceSystemIncludes(const string[] cmd, const Compiler comp
 private:
 
 string[] systemCompilerArg(const string[] cmd, const Compiler compiler) {
-    string[] args = ["-v", "/dev/null", "-fsyntax-only"];
+    version (Windows) {
+        string[] args = ["-v", "NUL", "-fsyntax-only"];
+    } else {
+        string[] args = ["-v", "/dev/null", "-fsyntax-only"];
+    }
     if (auto v = language(compiler, cmd)) {
         args = [v] ~ args;
     }

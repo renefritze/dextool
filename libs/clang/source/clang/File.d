@@ -32,7 +32,9 @@ struct File {
     /// Return the last modification time of the file.
     @property time_t time() const @trusted {
         // OK to throw away const because the C functions do not change the ptr.
-        return clang.c.Index.clang_getFileTime(cast(CType) cx);
+        // the cast is needed on Windows where the C time_t (64-bit) is not
+        // the same type as druntime's core.stdc.time.time_t.
+        return cast(time_t) clang.c.Index.clang_getFileTime(cast(CType) cx);
     }
 
     string absolutePath() {

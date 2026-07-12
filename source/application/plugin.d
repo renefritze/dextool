@@ -100,9 +100,11 @@ Validated[] scanForExecutables() {
  */
 auto filterValidPluginsThisExecutable(Validated[] fnames) @safe {
     import std.file : thisExePath;
-    import std.path : baseName;
+    import std.path : baseName, stripExtension;
 
-    immutable base_name = thisExePath.baseName ~ "-";
+    // strip the extension so plugins are found on Windows where _this_
+    // executable is e.g. dextool.exe and the plugins dextool-mutate.exe.
+    immutable base_name = thisExePath.baseName.stripExtension ~ "-";
     return filterValidPlugins(fnames, base_name);
 }
 

@@ -28,7 +28,12 @@ SysTime infTimeout() @safe pure nothrow {
 SysTime timeout(Duration d) @safe nothrow {
     import std.datetime : Clock;
 
-    return Clock.currTime + d;
+    // Clock.currTime is not nothrow on all platforms (Windows).
+    try {
+        return Clock.currTime + d;
+    } catch (Exception e) {
+    }
+    return SysTime.init + d;
 }
 
 /// Code looks better if it says delay when using delayedSend.

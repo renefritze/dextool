@@ -9,5 +9,7 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Dextool: C/C++ tooling for test and analy
 #
 # Debian specifics
 #
-execute_process(COMMAND dpkg --print-architecture OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE) 
-set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+if(UNIX)
+    execute_process(COMMAND dpkg --print-architecture OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE)
+    set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+endif()

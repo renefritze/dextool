@@ -7,6 +7,9 @@ Useful utility functions when working with posix/linux OS.
 */
 module my.unix;
 
+// only supported on Posix
+version (Posix):
+
 struct UtsName {
     // Name of this implementation of the operating system.
     string sysname;

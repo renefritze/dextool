@@ -321,7 +321,11 @@ nothrow:
             logger.info("Gathering runtime coverage data");
 
             // TODO: make this a configurable parameter?
-            const dir = makeXdgRuntimeDir(AbsolutePath("/dev/shm"));
+            version (Posix) {
+                const dir = makeXdgRuntimeDir(AbsolutePath("/dev/shm"));
+            } else {
+                const dir = makeXdgRuntimeDir();
+            }
             const covMapFname = AbsolutePath(dir ~ randomId(20));
 
             createCovMap(covMapFname, cast(long) localId.length);
@@ -421,7 +425,9 @@ void createCovMap(const AbsolutePath fname, const long localIdSz) {
 
     ubyte[K] zeroes;
     for (size_t i; i < allocSz; i += zeroes.length) {
-        covMap.rawWrite(zeroes);
+        // trusted: on Windows rawWrite is @system (temporary CRT mode switch
+        // of the file descriptor).
+        () @trusted { covMap.rawWrite(zeroes); }();
     }
 }
 
@@ -436,15 +442,19 @@ CovEntry[] readCovMap(const AbsolutePath fname, const long localIdSz) {
     // TODO: read multiple IDs at a time to speed up.
     ubyte[1] buf;
 
+    // trusted: on Windows rawRead is @system (temporary CRT mode switch of
+    // the file descriptor).
+    auto rawRead = () @trusted { return covMap.rawRead(buf); };
+
     // check that at least one test has executed and thus set the first byte.
-    auto r = covMap.rawRead(buf);
+    auto r = rawRead();
     if (r[0] == 0) {
         logger.info("No coverage instrumented binaries executed");
         return typeof(return).init;
     }
 
     foreach (i; 0 .. localIdSz) {
-        r = covMap.rawRead(buf);
+        r = rawRead();
         // something is wrong.
         if (r.empty)
             return typeof(return).init;

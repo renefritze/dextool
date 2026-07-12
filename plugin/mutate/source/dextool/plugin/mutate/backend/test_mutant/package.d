@@ -760,7 +760,6 @@ nothrow:
     }
 
     void opCall(ref SanityCheck data) {
-        import core.sys.posix.sys.stat : S_IWUSR;
         import std.path : buildPath;
         import my.file : getAttrs;
         import colorlog : color;
@@ -781,12 +780,22 @@ nothrow:
                     checksumFailed.put(abs_f);
                 }
 
-                uint attrs;
-                if (getAttrs(abs_f, attrs)) {
-                    if ((attrs & S_IWUSR) == 0) {
-                        writePermissionFailed.put(abs_f);
+                static bool isWritable(AbsolutePath f) {
+                    uint attrs;
+                    if (!getAttrs(f, attrs))
+                        return false;
+                    version (Posix) {
+                        import core.sys.posix.sys.stat : S_IWUSR;
+
+                        return (attrs & S_IWUSR) != 0;
+                    } else {
+                        import core.sys.windows.winnt : FILE_ATTRIBUTE_READONLY;
+
+                        return (attrs & FILE_ATTRIBUTE_READONLY) == 0;
                     }
-                } else {
+                }
+
+                if (!isWritable(abs_f)) {
                     writePermissionFailed.put(abs_f);
                 }
             } catch (Exception e) {
@@ -845,7 +854,7 @@ nothrow:
         if (local.get!ContinuesCheckTestSuite.lastWorklistCnt == 0) {
             // first time, just initialize.
             local.get!ContinuesCheckTestSuite.lastWorklistCnt = wlist;
-            local.get!ContinuesCheckTestSuite.lastCheck = Clock.currTime + forceCheckEach;
+            local.get!ContinuesCheckTestSuite.lastCheck = currTimeNothrow + forceCheckEach;
             return;
         }
 
@@ -854,13 +863,13 @@ nothrow:
         // period == 0 is mostly for test purpose because it makes it possible
         // to force a check for every mutant.
         if (!(period == 0 || wlist % period == 0 || diffCnt >= period
-                || Clock.currTime > local.get!ContinuesCheckTestSuite.lastCheck))
+                || currTimeNothrow > local.get!ContinuesCheckTestSuite.lastCheck))
             return;
 
         logger.info("Checking the test environment").collectException;
 
         local.get!ContinuesCheckTestSuite.lastWorklistCnt = wlist;
-        local.get!ContinuesCheckTestSuite.lastCheck = Clock.currTime + forceCheckEach;
+        local.get!ContinuesCheckTestSuite.lastCheck = currTimeNothrow + forceCheckEach;
 
         compile(conf.mutationCompile, conf.buildCmdTimeout, PrintCompileOnFailure(true)).match!(
                 (Mutation.Status a) { data.ok = false; }, (bool success) {
@@ -1173,7 +1182,7 @@ nothrow:
         // without taking up unreasonable amount of space.
         immutable maxScoreHistory = 10000;
 
-        const time = Clock.currTime.toUTC;
+        const time = currTimeNothrow.toUTC;
 
         const score = reportScore(*db);
         spinSql!(() @trusted {
@@ -1351,7 +1360,7 @@ nothrow:
         }();
 
         if (tester.ok) {
-            measures ~= tester.runtime.map!(a => TestCmdRuntime(Clock.currTime, a)).array;
+            measures ~= tester.runtime.map!(a => TestCmdRuntime(currTimeNothrow, a)).array;
             if (measures.length > 3) {
                 measures = measures[1 .. $]; // drop the oldest
             }
@@ -1437,9 +1446,9 @@ nothrow:
         nextMutant = MutationEntry.init;
 
         // it is OK to re-test the same mutant thus using a somewhat short timeout. It isn't fatal.
-        const giveUpAfter = Clock.currTime + 30.dur!"seconds";
+        const giveUpAfter = currTimeNothrow + 30.dur!"seconds";
         NextMutationEntry next;
-        while (Clock.currTime < giveUpAfter) {
+        while (currTimeNothrow < giveUpAfter) {
             next = spinSql!(() => db.nextMutation(maxParallelInstances));
 
             if (next.st == NextMutationEntry.Status.done)
@@ -1713,11 +1722,35 @@ private:
 
 import dextool.plugin.mutate.backend.database : dbOpenTimeout;
 
-ulong toMinMemory(double percentageOfTotal) {
-    import core.sys.posix.unistd : _SC_PHYS_PAGES, _SC_PAGESIZE, sysconf;
+/// Clock.currTime that is nothrow on all platforms (it is not on Windows).
+SysTime currTimeNothrow() @safe nothrow {
+    import std.datetime : Clock;
 
-    return cast(ulong)((1.0 - (percentageOfTotal / 100.0)) * sysconf(
-            _SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE));
+    try {
+        return Clock.currTime;
+    } catch (Exception e) {
+    }
+    return SysTime.init;
+}
+
+ulong toMinMemory(double percentageOfTotal) {
+    version (Posix) {
+        import core.sys.posix.unistd : _SC_PHYS_PAGES, _SC_PAGESIZE, sysconf;
+
+        return cast(ulong)((1.0 - (percentageOfTotal / 100.0)) * sysconf(
+                _SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE));
+    } else version (Windows) {
+        return () @trusted {
+            import core.sys.windows.winbase : GlobalMemoryStatusEx, MEMORYSTATUSEX;
+
+            MEMORYSTATUSEX mem;
+            mem.dwLength = MEMORYSTATUSEX.sizeof;
+            if (GlobalMemoryStatusEx(&mem) != 0) {
+                return cast(ulong)((1.0 - (percentageOfTotal / 100.0)) * mem.ullTotalPhys);
+            }
+            return 0UL;
+        }();
+    }
 }
 
 auto spawnDbActor(DbActor.Impl self, AbsolutePath dbPath) @trusted {
@@ -1791,8 +1824,8 @@ auto spawnDbActor(DbActor.Impl self, AbsolutePath dbPath) @trusted {
     }
 
     static MutationStatusId[] workList(ref Ctx ctx, GetWorklist _) @safe nothrow {
-        if (Clock.currTime > ctx.state.nextWorklistUpdate) {
-            ctx.state.nextWorklistUpdate = Clock.currTime + 30.dur!"seconds";
+        if (currTimeNothrow > ctx.state.nextWorklistUpdate) {
+            ctx.state.nextWorklistUpdate = currTimeNothrow + 30.dur!"seconds";
             ctx.state.workList = spinSql!(() => ctx.state.db.worklistApi.getAll).map!"a.id".array;
         }
         return ctx.state.workList;

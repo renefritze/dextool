@@ -5,7 +5,11 @@ Author: Joakim Brännström (joakim.brannstrom@gmx.com)
 */
 module proc.type;
 
-public import core.sys.posix.unistd : pid_t;
+version (Posix) {
+    public import core.sys.posix.unistd : pid_t;
+} else {
+    alias pid_t = int;
+}
 
 struct Pid {
     pid_t value;

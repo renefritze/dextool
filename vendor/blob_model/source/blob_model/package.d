@@ -437,7 +437,9 @@ const(ubyte)[] rawRead(string path) @safe {
     ubyte[4096] buf;
 
     while (!fin.eof) {
-        auto s = fin.rawRead(buf);
+        // trusted: on Windows rawRead is @system (temporary CRT mode switch
+        // of the file descriptor).
+        auto s = () @trusted { return fin.rawRead(buf); }();
         content.put(s);
     }
 

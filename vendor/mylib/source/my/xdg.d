@@ -60,13 +60,24 @@ import my.path;
  * purposes and should not place larger files in it, since it might reside in
  * runtime memory and cannot necessarily be swapped out to disk.
  */
-Path xdgRuntimeDir(AbsolutePath fallback = AbsolutePath("/tmp")) @safe {
+Path xdgRuntimeDir(AbsolutePath fallback = defaultRuntimeDirRoot()) @safe {
     import std.process : environment;
 
     auto xdg = environment.get("XDG_RUNTIME_DIR").Path;
     if (xdg.empty)
         xdg = makeXdgRuntimeDir(fallback);
     return xdg;
+}
+
+/// The root directory used when creating a runtime dir fallback.
+AbsolutePath defaultRuntimeDirRoot() @safe {
+    version (Posix) {
+        return AbsolutePath("/tmp");
+    } else {
+        import std.file : tempDir;
+
+        return AbsolutePath(tempDir);
+    }
 }
 
 @("shall return the XDG runtime directory")
@@ -79,7 +90,34 @@ unittest {
         assert(xdg == hostEnv);
 }
 
-AbsolutePath makeXdgRuntimeDir(AbsolutePath rootDir = AbsolutePath("/tmp")) @trusted {
+version (Windows) {
+    AbsolutePath makeXdgRuntimeDir(AbsolutePath rootDir = defaultRuntimeDirRoot()) @trusted {
+        import std.file : exists, mkdirRecurse, isDir;
+        import std.format : format;
+        import std.process : environment;
+
+        const user = environment.get("USERNAME", "user");
+
+        string createdTmp;
+        foreach (i; 0 .. 1000) {
+            createdTmp = format!"%s/user_%s_%s"(rootDir, user, i);
+            try {
+                if (!exists(createdTmp))
+                    mkdirRecurse(createdTmp);
+                if (isDir(createdTmp))
+                    break;
+            } catch (Exception e) {
+            }
+            createdTmp = null;
+        }
+
+        if (createdTmp.empty) {
+            throw new Exception("Unable to create runtime dir in " ~ rootDir.toString);
+        }
+        return Path(createdTmp).AbsolutePath;
+    }
+} else {
+    AbsolutePath makeXdgRuntimeDir(AbsolutePath rootDir = AbsolutePath("/tmp")) @trusted {
     import core.stdc.stdio : perror;
     import core.sys.posix.sys.stat : mkdir;
     import core.sys.posix.sys.stat;
@@ -122,26 +160,47 @@ AbsolutePath makeXdgRuntimeDir(AbsolutePath rootDir = AbsolutePath("/tmp")) @tru
         throw new Exception("Unable to create XDG_RUNTIME_DIR " ~ createdTmp);
     }
     return Path(createdTmp).AbsolutePath;
+    }
 }
 
 @safe:
 
 /// The XDG standard directory for data files.
 AbsolutePath xdgDataHome() {
-    return AbsolutePath(environment.get("XDG_DATA_HOME", "~/.local/share"));
+    version (Windows) {
+        import std.file : tempDir;
+
+        return AbsolutePath(environment.get("XDG_DATA_HOME", environment.get("LOCALAPPDATA",
+                tempDir)));
+    } else {
+        return AbsolutePath(environment.get("XDG_DATA_HOME", "~/.local/share"));
+    }
 }
 
 /// The XDG standard directory for config files.
 AbsolutePath xdgConfigHome() {
-    return AbsolutePath(environment.get("XDG_CONFIG_HOME", "~/.config"));
+    version (Windows) {
+        import std.file : tempDir;
+
+        return AbsolutePath(environment.get("XDG_CONFIG_HOME", environment.get("APPDATA",
+                tempDir)));
+    } else {
+        return AbsolutePath(environment.get("XDG_CONFIG_HOME", "~/.config"));
+    }
 }
 
 /// The prefered search order for data files.
 AbsolutePath[] xdgDataDirs() {
-    return environment.get("XDG_DATA_DIRS").splitter(':').map!(a => AbsolutePath(a)).array;
+    import std.path : pathSeparator;
+
+    return environment.get("XDG_DATA_DIRS").splitter(pathSeparator).map!(
+            a => AbsolutePath(a)).array;
 }
 
 /// The prefered search order for config files.
 AbsolutePath[] xdgConfigDirs() {
-    return environment.get("XDG_CONFIG_DIRS").splitter(':').map!(a => AbsolutePath(a)).array;
+    import std.path : pathSeparator;
+
+    return environment.get("XDG_CONFIG_DIRS").splitter(pathSeparator).map!(
+            a => AbsolutePath(a)).array;
 }

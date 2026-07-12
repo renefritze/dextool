@@ -74,11 +74,14 @@ struct TranslationUnit {
         import std.string : toStringz;
 
         string path = randomSourceFileName;
+        // the cast is needed because the C type of Length is unsigned long
+        // which is 32-bit on Windows.
+        alias LengthT = typeof(CXUnsavedFile.init.Length);
         auto file = CXUnsavedFile.init;
         if (source.length == 0) {
-            file = CXUnsavedFile(path.toStringz, null, source.length);
+            file = CXUnsavedFile(path.toStringz, null, cast(LengthT) source.length);
         } else {
-            file = CXUnsavedFile(path.toStringz, &source[0], source.length);
+            file = CXUnsavedFile(path.toStringz, &source[0], cast(LengthT) source.length);
         }
 
         auto in_memory_files = unsavedFiles ~ [file];
