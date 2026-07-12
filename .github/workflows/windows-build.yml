@@ -109,8 +109,29 @@ jobs:
       - name: Smoke test
         run: |
           & build\dextool.exe --version
-          & build\dextool.exe --plugin-list
-          & build\dextool.exe mutate --help
+          if ($LASTEXITCODE -ne 0) { throw "dextool --version failed" }
+          $plugins = & build\dextool.exe --plugin-list | Out-String
+          Write-Host $plugins
+          if ($plugins -notmatch "mutate") { throw "mutate plugin not discovered" }
+          & build\dextool.exe mutate analyze --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "mutate analyze --help failed" }
+        shell: pwsh
+
+      - name: End to end mutate smoke test
+        run: |
+          New-Item -ItemType Directory -Force -Path smoke\src | Out-Null
+          Set-Content smoke\src\fn.cpp "int fn(int x) { return x + 1; }"
+          Set-Content smoke\src\main.cpp "int fn(int x);`nint main() { return fn(1) == 2 ? 0 : 1; }"
+          Set-Content smoke\CMakeLists.txt "cmake_minimum_required(VERSION 3.10)`nproject(smoke CXX)`nadd_executable(smoke src/fn.cpp src/main.cpp)"
+          cmake -S smoke -B smoke\build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_CXX_COMPILER=clang++
+          if ($LASTEXITCODE -ne 0) { throw "smoke project configure failed" }
+          Push-Location smoke
+          & ..\build\dextool.exe mutate analyze --compile-db build\compile_commands.json --out .
+          if ($LASTEXITCODE -ne 0) { throw "mutate analyze failed" }
+          if (-not (Test-Path dextool_mutate.sqlite3)) { throw "analyze produced no database" }
+          & ..\build\dextool.exe mutate report --style plain --out .
+          if ($LASTEXITCODE -ne 0) { throw "mutate report failed" }
+          Pop-Location
         shell: pwsh
 
       - name: Install
