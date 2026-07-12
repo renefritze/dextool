@@ -91,6 +91,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=cl `
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
             -DLLVM_ROOT=C:\llvm `
+            -DLLVM_INCLUDE_TESTS=OFF `
             -DCLANG_INCLUDE_TESTS=OFF `
             -DCLANG_INCLUDE_DOCS=OFF `
             -DCLANG_ENABLE_ARCMT=OFF `
