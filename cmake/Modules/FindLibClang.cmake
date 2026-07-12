@@ -14,6 +14,80 @@
 #   LIBLLVM_FLAGS           - the required flags by llvm-d such as version
 #   LIBLLVM_LIBS            - the required libraries for linking LLVM
 
+if(WIN32)
+    # On Windows the introspection helper is bypassed. LLVM is located via
+    # llvm-config.exe (from a full LLVM distribution such as the official
+    # clang+llvm-<version>-x86_64-pc-windows-msvc archive, which ships the
+    # headers and static libraries needed by the clang extensions).
+    #
+    # All linker related flags use the dmd/ldmd2 -L passthrough syntax so
+    # they survive the trip through the D compiler to the MSVC linker.
+    if(DEFINED ENV{LLVM_CONFIG} AND EXISTS "$ENV{LLVM_CONFIG}")
+        set(LLVM_CONFIG_BIN "$ENV{LLVM_CONFIG}")
+    else()
+        find_program(LLVM_CONFIG_BIN NAMES llvm-config)
+    endif()
+    if(NOT LLVM_CONFIG_BIN)
+        message(FATAL_ERROR "llvm-config not found. Install a full LLVM distribution and add its bin directory to PATH or set the LLVM_CONFIG environment variable.")
+    endif()
+    message(STATUS "Using llvm-config: ${LLVM_CONFIG_BIN}")
+
+    execute_process(COMMAND ${LLVM_CONFIG_BIN} --version
+        OUTPUT_VARIABLE llvm_config_VERSION
+        RESULT_VARIABLE llvm_config_VERSION_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND ${LLVM_CONFIG_BIN} --includedir
+        OUTPUT_VARIABLE llvm_config_INCLUDEDIR
+        RESULT_VARIABLE llvm_config_INCLUDEDIR_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND ${LLVM_CONFIG_BIN} --libdir
+        OUTPUT_VARIABLE llvm_config_LIBDIR
+        RESULT_VARIABLE llvm_config_LIBDIR_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(llvm_config_VERSION_status OR llvm_config_INCLUDEDIR_status OR llvm_config_LIBDIR_status)
+        message(FATAL_ERROR "Failed to run ${LLVM_CONFIG_BIN}")
+    endif()
+
+    file(TO_CMAKE_PATH "${llvm_config_INCLUDEDIR}" llvm_config_INCLUDEDIR)
+    file(TO_CMAKE_PATH "${llvm_config_LIBDIR}" llvm_config_LIBDIR)
+
+    if(llvm_config_INCLUDEDIR MATCHES " " OR llvm_config_LIBDIR MATCHES " ")
+        message(FATAL_ERROR "The LLVM installation path contains spaces (${llvm_config_LIBDIR}). Install LLVM to a path without spaces, e.g. C:/llvm.")
+    endif()
+
+    string(REPLACE "." ";" llvm_version_list "${llvm_config_VERSION}")
+    list(GET llvm_version_list 0 llvm_version_major)
+    list(GET llvm_version_list 1 llvm_version_minor)
+    list(GET llvm_version_list 2 llvm_version_patch)
+    string(REGEX REPLACE "[^0-9].*" "" llvm_version_patch "${llvm_version_patch}")
+
+    # All clang and LLVM static libs. link.exe resolves symbols across the
+    # whole set so the order does not matter.
+    file(GLOB llvm_static_libs RELATIVE ${llvm_config_LIBDIR}
+        ${llvm_config_LIBDIR}/LLVM*.lib
+        ${llvm_config_LIBDIR}/clang[A-Z]*.lib)
+    set(llvm_libs_dmd)
+    foreach(l ${llvm_static_libs})
+        list(APPEND llvm_libs_dmd "-L${l}")
+    endforeach()
+    # System libraries LLVM depends on.
+    foreach(l psapi.lib shell32.lib ole32.lib uuid.lib advapi32.lib ws2_32.lib ntdll.lib version.lib)
+        list(APPEND llvm_libs_dmd "-L${l}")
+    endforeach()
+
+    set(LIBCLANG_LIBS "-Llibclang.lib" CACHE STRING "Linker libraries for libclang")
+    set(LIBCLANG_LDFLAGS "-L/LIBPATH:${llvm_config_LIBDIR}" CACHE STRING "Linker flags for libclang")
+    set(LIBCLANG_CONFIG_DONE YES CACHE BOOL "CLANG Configuration status" FORCE)
+
+    set(LIBLLVM_MAJOR_VERSION "${llvm_version_major}" CACHE STRING "libLLVM major version")
+    set(LIBLLVM_LIBS "${llvm_libs_dmd}" CACHE STRING "Linker libraries for libLLVM")
+    set(LIBLLVM_LDFLAGS "-L/LIBPATH:${llvm_config_LIBDIR}" CACHE STRING "Linker flags for libLLVM")
+    set(LIBLLVM_CXX_FLAGS "-I${llvm_config_INCLUDEDIR} /std:c++17 /EHsc /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS ${LIBLLVM_CXX_EXTRA_FLAGS}" CACHE STRING "Compiler flags for C++ using LLVM")
+    set(LIBLLVM_FLAGS "-version=LLVM_${llvm_version_major}_${llvm_version_minor}_${llvm_version_patch}" CACHE STRING "D flags for llvm-d")
+    set(LIBLLVM_LIBCLANG_INC "${llvm_config_INCLUDEDIR}" CACHE STRING "Path to where libclang-c headers such as Index.h is")
+    set(LIBLLVM_CONFIG_DONE YES CACHE BOOL "LLVM Configuration status" FORCE)
+else()
+
 set(LLVM_CMD_SRC ${CMAKE_SOURCE_DIR}/cmake/introspect_llvm.d)
 set(LLVM_CMD ${CMAKE_BINARY_DIR}/cmake_introspect_llvm)
 set(LIBCLANG_PREPROCESS_CMD_SRC ${CMAKE_SOURCE_DIR}/cmake/preprocess_libclang.d)
@@ -148,6 +222,8 @@ try_llvm_from_user_config()
 if (NOT LIBLLVM_CONFIG_DONE)
     try_llvm_config_find()
 endif()
+
+endif() # WIN32
 
 # Create the file used in D code
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/llvm)

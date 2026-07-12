@@ -34,7 +34,7 @@ endfunction()
 # Copy/link the target to the binary directory.
 # Useful to collect all the binaries in one directory for testing purpose.
 function(collect_binary_in_root name)
-    create_link(${name} ${CMAKE_CURRENT_BINARY_DIR}/${name} ${CMAKE_BINARY_DIR}/${name})
+    create_link(${name} $<TARGET_FILE:${name}> ${CMAKE_BINARY_DIR}/${name}${CMAKE_EXECUTABLE_SUFFIX})
 endfunction()
 
 #=============================================================================#
@@ -44,7 +44,7 @@ function(create_link target src dst)
     add_custom_command(
         TARGET ${target}
         POST_BUILD
-        COMMAND ${CMAKE_BINARY_DIR}/symlink ${src} ${dst}
+        COMMAND ${CMAKE_BINARY_DIR}/symlink${CMAKE_EXECUTABLE_SUFFIX} ${src} ${dst}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 endfunction()
@@ -105,7 +105,7 @@ function(add_unittest_to_check name)
     # which in turn is dependent on the executable
     add_custom_command(OUTPUT "${name}.stamp"
         COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "${name}_"
-        COMMAND touch ${name}.stamp
+        COMMAND ${CMAKE_COMMAND} -E touch ${name}.stamp
         DEPENDS ${name}
         COMMENT "Running test ${name}"
         )
