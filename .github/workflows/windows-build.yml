@@ -76,17 +76,14 @@ jobs:
           # need. Build just those libraries standalone against the prebuilt
           # LLVM. The result is cached.
           $base = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VERSION }}"
-          Invoke-WebRequest -Uri "$base/clang-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile clang-src.tar.xz
-          Invoke-WebRequest -Uri "$base/cmake-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile cmake-src.tar.xz
-          Invoke-WebRequest -Uri "$base/third-party-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile third-party-src.tar.xz
+          # LLVM no longer publishes per-subproject source tarballs; extract
+          # the needed subdirectories from the monorepo tarball.
+          Invoke-WebRequest -Uri "$base/llvm-project-${{ env.LLVM_VERSION }}.src.tar.xz" -OutFile llvm-project-src.tar.xz
           New-Item -ItemType Directory -Force -Path C:\llvm-src | Out-Null
-          tar -xf clang-src.tar.xz -C C:\llvm-src
-          tar -xf cmake-src.tar.xz -C C:\llvm-src
-          tar -xf third-party-src.tar.xz -C C:\llvm-src
-          Rename-Item C:\llvm-src\clang-${{ env.LLVM_VERSION }}.src clang
-          Rename-Item C:\llvm-src\cmake-${{ env.LLVM_VERSION }}.src cmake
-          Rename-Item C:\llvm-src\third-party-${{ env.LLVM_VERSION }}.src third-party
-          Remove-Item clang-src.tar.xz, cmake-src.tar.xz, third-party-src.tar.xz
+          $prefix = "llvm-project-${{ env.LLVM_VERSION }}.src"
+          tar -xf llvm-project-src.tar.xz -C C:\llvm-src --strip-components=1 "$prefix/clang" "$prefix/cmake" "$prefix/third-party"
+          if ($LASTEXITCODE -ne 0) { throw "source extraction failed" }
+          Remove-Item llvm-project-src.tar.xz
 
           cmake -S C:\llvm-src\clang -B C:\llvm-src\build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
