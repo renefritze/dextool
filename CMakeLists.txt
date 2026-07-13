@@ -22,6 +22,13 @@ if(NOT LIBCLANG_LIB_PATH OR NOT LIBCLANG_LDFLAGS)
 endif()
 include(BuildD)
 
+if(WIN32 AND LIBCLANG_RUNTIME_DLL)
+    # Ship libclang.dll next to the executables (which live in bin/) so the
+    # installed tree can be extracted and run anywhere without a separate LLVM
+    # installation on PATH.
+    install(FILES "${LIBCLANG_RUNTIME_DLL}" DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+endif()
+
 if(WIN32)
     # all executables are linked by the D compiler which does not understand
     # the bare MSVC linker flags cmake defaults to (/machine:x64 etc) and

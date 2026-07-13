@@ -138,6 +138,46 @@ jobs:
         run: cmake --install build
         shell: pwsh
 
+      - name: Verify artifact is self-contained
+        # Extract the install tree to a fresh location and run an end to end
+        # mutate analyze/report from it with the LLVM (and LDC) directories
+        # removed from PATH. This reproduces exactly what a user does after
+        # downloading the artifact and fails if libclang.dll (or any other
+        # runtime dependency) is not shipped inside the archive.
+        run: |
+          if (-not (Test-Path C:/dextool_install/bin/libclang.dll)) {
+            throw "libclang.dll was not installed into the artifact"
+          }
+
+          # simulate downloading and extracting the artifact somewhere else
+          $extracted = "C:\extracted"
+          Copy-Item -Recurse -Force C:/dextool_install $extracted
+
+          # drop the toolchain directories so the binaries can only resolve
+          # their runtime dependencies from next to themselves
+          $clean = ($env:PATH -split ';' | Where-Object {
+            $_ -and ($_ -notlike '*\llvm\*') -and ($_ -notlike '*\ldc2\*')
+          }) -join ';'
+          $env:PATH = $clean
+
+          $dextool = "$extracted\bin\dextool.exe"
+          & $dextool --version
+          if ($LASTEXITCODE -ne 0) { throw "extracted dextool --version failed" }
+          $plugins = & $dextool --plugin-list | Out-String
+          if ($plugins -notmatch "mutate") { throw "mutate plugin not discovered in extracted tree" }
+
+          # reuse the compile database produced by the earlier smoke test and
+          # run a real analyze + report through the extracted mutate binary
+          New-Item -ItemType Directory -Force -Path selfcontained | Out-Null
+          Push-Location selfcontained
+          & $dextool mutate analyze --compile-db ..\smoke\build\compile_commands.json --out .
+          if ($LASTEXITCODE -ne 0) { throw "extracted mutate analyze failed (missing runtime dependency?)" }
+          if (-not (Test-Path dextool_mutate.sqlite3)) { throw "extracted analyze produced no database" }
+          & $dextool mutate report --style plain --out .
+          if ($LASTEXITCODE -ne 0) { throw "extracted mutate report failed" }
+          Pop-Location
+        shell: pwsh
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
