@@ -44,12 +44,30 @@ if(WIN32)
         OUTPUT_VARIABLE llvm_config_LIBDIR
         RESULT_VARIABLE llvm_config_LIBDIR_status
         OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(llvm_config_VERSION_status OR llvm_config_INCLUDEDIR_status OR llvm_config_LIBDIR_status)
+    execute_process(COMMAND ${LLVM_CONFIG_BIN} --bindir
+        OUTPUT_VARIABLE llvm_config_BINDIR
+        RESULT_VARIABLE llvm_config_BINDIR_status
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(llvm_config_VERSION_status OR llvm_config_INCLUDEDIR_status OR llvm_config_LIBDIR_status OR llvm_config_BINDIR_status)
         message(FATAL_ERROR "Failed to run ${LLVM_CONFIG_BIN}")
     endif()
 
     file(TO_CMAKE_PATH "${llvm_config_INCLUDEDIR}" llvm_config_INCLUDEDIR)
     file(TO_CMAKE_PATH "${llvm_config_LIBDIR}" llvm_config_LIBDIR)
+    file(TO_CMAKE_PATH "${llvm_config_BINDIR}" llvm_config_BINDIR)
+
+    # dextool links against the libclang import library (libclang.lib) so the
+    # produced executables have a runtime dependency on libclang.dll. Locate
+    # the dll next to llvm-config so the top level CMakeLists can install it
+    # alongside the binaries and make the install tree self contained.
+    find_file(LIBCLANG_RUNTIME_DLL
+        NAMES libclang.dll
+        PATHS "${llvm_config_BINDIR}"
+        NO_DEFAULT_PATH)
+    if(NOT LIBCLANG_RUNTIME_DLL)
+        message(FATAL_ERROR "libclang.dll not found in ${llvm_config_BINDIR}. The installed binaries would not be able to load libclang at runtime.")
+    endif()
+    message(STATUS "libclang runtime dll: ${LIBCLANG_RUNTIME_DLL}")
 
     if(llvm_config_INCLUDEDIR MATCHES " " OR llvm_config_LIBDIR MATCHES " ")
         message(FATAL_ERROR "The LLVM installation path contains spaces (${llvm_config_LIBDIR}). Install LLVM to a path without spaces, e.g. C:/llvm.")
