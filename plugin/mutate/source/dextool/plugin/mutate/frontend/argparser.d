@@ -256,6 +256,10 @@ struct ArgParser {
         app.put("[mutant_test]");
         app.put(null);
         app.put("# command to build the program **and** test suite.");
+        app.put(
+                "# to run a script, invoke it via its interpreter, e.g. [[\"bash\", \"build.sh\"]]");
+        app.put(
+                "# (required on Windows, which cannot execute a script directly).");
         app.put(format!`build_cmd = ["cd build && make -j%s"]`(totalCPUs));
         app.put(null);
         app.put("# at least one of test_cmd_dir (recommended) or test_cmd needs to be specified.");
@@ -276,6 +280,12 @@ struct ArgParser {
         app.put(`# 1. ["test1.sh", "test2.sh"]`);
         app.put(`# 2. [["test1.sh", "-x"], "test2.sh"]`);
         app.put(`# 3. [["/bin/make", "test"]]`);
+        app.put(
+                "# shell/Python scripts must be invoked via their interpreter for portability");
+        app.put(
+                "# (Windows cannot execute a script directly, it has no shebang handling):");
+        app.put(`# 4. [["bash", "test.sh"]]`);
+        app.put(`# 5. [["python", "test.py"]]`);
         app.put(`# test_cmd = ["./test.sh"]`);
         app.put(null);
         app.put(
@@ -287,6 +297,7 @@ struct ArgParser {
         app.put(null);
         app.put(
                 "# program used to analyze the output from the test suite for test cases that killed the mutant");
+        app.put(`# to run a script, invoke it via its interpreter: analyze_cmd = [["bash", "analyze.sh"]]`);
         app.put(`# analyze_cmd = "analyze.sh"`);
         app.put(null);
         app.put("# built-in analyzer of output from testing frameworks to find failing test cases");

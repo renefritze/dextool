@@ -411,6 +411,9 @@ RunResult spawnRunTest(ShellCommand cmd, Duration timeout, string[string] env, T
     } catch (Exception e) {
         logger.warning(cmd).collectException;
         logger.warning(e.msg).collectException;
+        logger.info(
+                `If the command is a shell/Python script, invoke it via its interpreter, e.g. test_cmd = [["bash", "script.sh"]] or [["python", "script.py"]]. This is required on Windows, which cannot execute scripts directly.`)
+            .collectException;
         rval.status = RunResult.Status.error;
     }
 
@@ -608,7 +611,9 @@ struct AvailableMem {
     import std.string : startsWith, split;
 
     static const Duration pollFreq = 5.dur!"seconds";
-    File procMem;
+    // only Linux exposes available memory via /proc/meminfo.
+    version (linux)
+        File procMem;
     SysTime nextPoll;
     long current = long.max;
 
@@ -622,28 +627,50 @@ struct AvailableMem {
     }
 
     static AvailableMem* make() @safe nothrow {
-        try {
-            return new AvailableMem(File("/proc/meminfo"), Clock.currTime);
-        } catch (Exception e) {
-            logger.warning("Unable to open /proc/meminfo").collectException;
+        version (linux) {
+            try {
+                return new AvailableMem(File("/proc/meminfo"), Clock.currTime);
+            } catch (Exception e) {
+                logger.warning("Unable to open /proc/meminfo").collectException;
+            }
+            return new AvailableMem(File.init, currTimeNothrow);
+        } else {
+            // Windows queries available memory directly in available(); other
+            // platforms have no probe and thus the memory limit never triggers.
+            return new AvailableMem(currTimeNothrow);
         }
-        return new AvailableMem(File.init, currTimeNothrow);
     }
 
     long available() @trusted nothrow {
-        if (currTimeNothrow > nextPoll && procMem.isOpen) {
-            try {
-                procMem.rewind;
-                procMem.flush;
-                foreach (l; procMem.byLine
-                        .filter!(l => l.startsWith("MemAvailable"))
-                        .map!(a => a.split)
-                        .filter!(a => a.length >= 3)) {
-                    current = to!long(l[1]) * 1024;
-                    break;
+        if (currTimeNothrow > nextPoll) {
+            version (linux) {
+                if (procMem.isOpen) {
+                    try {
+                        procMem.rewind;
+                        procMem.flush;
+                        foreach (l; procMem.byLine
+                                .filter!(l => l.startsWith("MemAvailable"))
+                                .map!(a => a.split)
+                                .filter!(a => a.length >= 3)) {
+                            current = to!long(l[1]) * 1024;
+                            break;
+                        }
+                    } catch (Exception e) {
+                        current = long.max;
+                    }
                 }
-            } catch (Exception e) {
-                current = long.max;
+            } else version (Windows) {
+                try {
+                    import core.sys.windows.winbase : GlobalMemoryStatusEx, MEMORYSTATUSEX;
+
+                    MEMORYSTATUSEX mem;
+                    mem.dwLength = MEMORYSTATUSEX.sizeof;
+                    if (GlobalMemoryStatusEx(&mem) != 0) {
+                        current = cast(long) mem.ullAvailPhys;
+                    }
+                } catch (Exception e) {
+                    current = long.max;
+                }
             }
             nextPoll = currTimeNothrow + pollFreq;
         }

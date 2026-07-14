@@ -781,7 +781,10 @@ also the one that has to be highly flexible.
 
 `build_cmd`: Program/script used to build the application. Will be called to
 compile both the original program (sanity check) and to compile the program
-each time a mutant is injected.
+each time a mutant is injected. Shell or Python scripts should be invoked
+through their interpreter, e.g. `build_cmd = [["bash", "build.sh"]]`. This is
+required on Windows, which cannot execute a script file directly (it has no
+shebang handling), while git-bash and other POSIX shells honor the shebang.
 
 `test_cmd_dir`: The directory is analyzed for executables. All executables that
 are found then used as test case binaries. This is a convenient option to use
@@ -798,7 +801,11 @@ Googletest.
 
 `test_cmd`: If `test_cmd_dir` isn't suitable to use then this allows a manual
 specification of the test binaries to execute together with, for the complex
-cases, also specifying the flags to use per command.
+cases, also specifying the flags to use per command. Test commands are executed
+directly (no shell), so shell or Python scripts must be invoked through their
+interpreter, e.g. `test_cmd = [["bash", "run_tests.sh"]]` or
+`test_cmd = [["python", "run_tests.py"]]`. This is required on Windows, which
+cannot execute a script file directly (it has no shebang handling).
 
 `test_cmd_timeout`: Timeout of the test suite. This should normally **not** be
 used. The default for dextool is to use a dynamic timeout that is derived by
