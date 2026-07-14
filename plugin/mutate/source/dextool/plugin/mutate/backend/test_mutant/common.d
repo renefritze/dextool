@@ -483,6 +483,9 @@ CompileResult compile(ShellCommand cmd, Duration timeout, PrintCompileOnFailure 
         logger.warning("Unknown error when executing the build command").collectException;
         logger.warning(cmd.value).collectException;
         logger.warning(e.msg).collectException;
+        logger.info(
+                `If the build command is a shell/Python script, invoke it via its interpreter, e.g. build_cmd = [["bash", "build.sh"]] or [["python", "build.py"]]. This is required on Windows, which cannot execute scripts directly.`)
+            .collectException;
         return CompileResult(Mutation.Status.unknown);
     }
 

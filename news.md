@@ -19,6 +19,12 @@ Fixes
    to use the mutation testing plugin on newer compilers.
  * Fix mutate analyze never stopping when analyzing complex code such as
    fmtlib.
+ * Fixed the mutate plugin printing a spurious `Unable to open /proc/meminfo`
+   warning on Windows. Available memory is now queried via `GlobalMemoryStatusEx`
+   so the memory limit also works on Windows.
+ * Improved the error message when a test/build command fails to spawn, hinting
+   that shell/Python scripts must be invoked through their interpreter (e.g.
+   `test_cmd = [["bash", "script.sh"]]`), which is required on Windows.
 
 # v5.3 Chert
 
