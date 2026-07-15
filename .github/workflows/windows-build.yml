@@ -2,13 +2,20 @@ name: Windows Build
 
 on:
   pull_request:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: false
+        type: string
+        default: ""
+      upload_release_zip:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   LLVM_VERSION: "22.1.0"
@@ -26,6 +33,11 @@ jobs:
           # needed for git describe to embed the version
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Checkout tagged commit
+        if: github.event_name == 'workflow_call' && inputs.release_tag != ''
+        run: git checkout "refs/tags/${{ inputs.release_tag }}"
+        shell: pwsh
 
       - name: Cache LLVM
         id: cache-llvm
@@ -184,13 +196,16 @@ jobs:
           name: dextool-windows-x64
           path: C:/dextool_install
 
-      - name: Create release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Create release zip
+        if: github.event_name == 'workflow_call' && inputs.upload_release_zip
         run: |
-          $tag = "${{ github.ref_name }}"
-          $zip = "dextool-windows-x64-$tag.zip"
+          $zip = "dextool-windows-x64-${{ inputs.release_tag }}.zip"
           Compress-Archive -Path C:\dextool_install\* -DestinationPath $zip
-          gh release create $tag $zip --title $tag --notes "Automated release for $tag"
         shell: pwsh
+
+      - name: Upload release zip artifact
+        if: github.event_name == 'workflow_call' && inputs.upload_release_zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-zip
+          path: dextool-windows-x64-${{ inputs.release_tag }}.zip
