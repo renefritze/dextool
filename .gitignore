@@ -10,6 +10,7 @@ results.json
 *.orig
 
 build/
+build-test/
 docs/
 tmp/
 resources/version.txt

@@ -1,4 +1,4 @@
-name: Tag Release
+name: Release
 
 on:
   push:
@@ -9,11 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-tagging
+  group: release-master
 
 jobs:
   tag:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.compute-tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +24,19 @@ jobs:
           fetch-tags: true
 
       - name: Compute and push next tag
+        id: compute-tag
         run: |
           set -euo pipefail
 
-          latest=$(git tag -l 'v0.0.*' | sed -E 's/^v0\.0\.//' | sort -n | tail -1)
+          existing="$(git tag --points-at HEAD -l 'v0.0.*' | sort -V | tail -1)"
+          if [ -n "${existing}" ]; then
+            tag="${existing}"
+            echo "Using existing tag for HEAD: ${tag}"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest="$(git tag -l 'v0.0.*' | sed -E 's/^v0\.0\.//' | sort -n | tail -1)"
           next=$(( ${latest:-0} + 1 ))
           tag="v0.0.${next}"
 
@@ -35,3 +46,34 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+  windows-build:
+    needs: tag
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      release_tag: ${{ needs.tag.outputs.tag }}
+      upload_release_zip: true
+
+  create-release:
+    needs: [tag, windows-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release zip
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows-zip
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          zip="dextool-windows-x64-${TAG}.zip"
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${zip}" --clobber
+          else
+            gh release create "${TAG}" "${zip}" --title "${TAG}" --notes "Automated release for ${TAG}"
+          fi
