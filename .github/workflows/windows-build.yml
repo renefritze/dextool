@@ -35,7 +35,7 @@ jobs:
           fetch-tags: true
 
       - name: Checkout tagged commit
-        if: github.event_name == 'workflow_call' && inputs.release_tag != ''
+        if: inputs.release_tag != ''
         run: git checkout "refs/tags/${{ inputs.release_tag }}"
         shell: pwsh
 
@@ -197,14 +197,14 @@ jobs:
           path: C:/dextool_install
 
       - name: Create release zip
-        if: github.event_name == 'workflow_call' && inputs.upload_release_zip
+        if: inputs.upload_release_zip
         run: |
           $zip = "dextool-windows-x64-${{ inputs.release_tag }}.zip"
           Compress-Archive -Path C:\dextool_install\* -DestinationPath $zip
         shell: pwsh
 
       - name: Upload release zip artifact
-        if: github.event_name == 'workflow_call' && inputs.upload_release_zip
+        if: inputs.upload_release_zip
         uses: actions/upload-artifact@v4
         with:
           name: release-windows-zip
